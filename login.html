@@ -111,13 +111,22 @@
             }
         }
 
-        async function syncProfile(user) {
-            const { data: profile } = await supabaseClient.from('profiles').select('*').eq('user_id', user.id).single();
-            if (profile) return profile.credits;
-            const { data: newProfile, error: insertError } = await supabaseClient
-                .from('profiles').insert([{ user_id: user.id, email: user.email, credits: 0 }]).select().single();
-            return insertError ? 0 : newProfile.credits;
-        }
+// 修改后的简化版，只负责读取积分，不再负责写入
+async function syncProfile(user) {
+    // 只做查询
+    const { data: profile, error } = await supabaseClient
+        .from('profiles')
+        .select('credits')
+        .eq('user_id', user.id)
+        .single();
+
+    if (error) {
+        console.log("正在等待后台触发器创建账本...");
+        return 0; // 如果还没查到，默认显示 0
+    }
+    
+    return profile ? profile.credits : 0;
+}
 
         async function handleAuth() {
             const email = document.getElementById('email').value.trim();
