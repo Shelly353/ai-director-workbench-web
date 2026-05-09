@@ -465,10 +465,44 @@ async function checkAndDeductCredits(actionKey, modelName) {
             a.download = `AI_Gen_${Date.now()}.png`; a.click();
         }
 
-        function confirmAndReturn() {
+// 🌟 修改：变成 async 异步函数，以便执行数据库写入
+        async function confirmAndReturn() {
             if(!generatedB64) return;
-            if (window.parent && window.parent.addGeneratedImageToRow) window.parent.addGeneratedImageToRow(rowId, generatedB64);
-            else alert("未检测到父页面连接，无法保存！");
+            
+            // --- 🌟 核心新增逻辑：自动保存到全局资产 ---
+            try {
+                // 1. 确保全局资产对象存在（如果为空则初始化）
+                if (!globalExtractedData) globalExtractedData = { characters: [], scenes: [], props: [], effects: [] };
+                // 借用 props (道具) 类别来存放通用生图，也可以放 effects
+                if (!globalExtractedData.props) globalExtractedData.props = [];
+                
+                // 2. 生成一个唯一名称，防止重名
+                const assetName = "独立生图_" + Math.floor(Math.random() * 10000);
+                
+                // 3. 将新图片塞入全局数组
+                globalExtractedData.props.push({
+                    name: assetName,
+                    description: "高级工作台生成",
+                    img: generatedB64,
+                    refImages: []
+                });
+                
+                // 4. 保存回云端数据库
+                await DB.set('extractedData', globalExtractedData);
+                log(`✅ 已同步保存至全局资产库: [${assetName}]`);
+                
+            } catch (err) {
+                console.error("同步全局资产失败:", err);
+                log(`❌ 同步全局资产失败: ${err.message}`);
+            }
+            // ----------------------------------------
+
+            // --- 原有逻辑：把图片传给父页面的分镜块 ---
+            if (window.parent && window.parent.addGeneratedImageToRow) {
+                window.parent.addGeneratedImageToRow(rowId, generatedB64);
+            } else {
+                alert("✅ 已成功保存到全局资产！\n\n(注：未检测到父页面连接，无法直接插入当前分镜)");
+            }
         }
     </script>
 </body>
