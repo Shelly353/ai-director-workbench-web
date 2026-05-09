@@ -9,151 +9,152 @@
         input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
         .btn-full { width: 100%; padding: 12px; margin-top: 20px; font-weight: bold; cursor: pointer;}
         .toggle-link { margin-top: 15px; font-size: 13px; color: var(--primary); cursor: pointer; display: block; }
+        .hidden { display: none !important; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body style="background: #f4f5f9;">
+
     <div class="login-box">
-        <h2 id="title">🎬 AI 导演工作站</h2>
-        <input type="email" id="email" placeholder="邮箱地址">
-        <input type="password" id="password" placeholder="密码">
-        <button class="btn btn-primary btn-full" id="mainBtn" onclick="handleAuth()">进入工作站</button>
-        <span class="toggle-link" id="toggleLink" onclick="toggleMode()">没有账号？点击注册</span>
-<span class="toggle-link" id="forgetPwdLink" style="color: #86909c; font-size: 12px; margin-top: 10px;" onclick="handleForgetPassword()">忘记密码？</span>
+        <div id="authArea">
+            <h2 id="title">🎬 AI 导演工作站</h2>
+            <input type="email" id="email" placeholder="邮箱地址">
+            <input type="password" id="password" placeholder="密码">
+            <button class="btn btn-primary btn-full" id="mainBtn" onclick="handleAuth()">进入工作站</button>
+            <span class="toggle-link" id="toggleLink" onclick="toggleMode()">没有账号？点击注册</span>
+            <span class="toggle-link" id="forgetPwdLink" style="color: #86909c; font-size: 12px; margin-top: 10px;" onclick="handleForgetPassword()">忘记密码？</span>
+        </div>
+
+        <div id="resetArea" class="hidden">
+            <h2 style="color: #1677ff;">🔒 重置密码</h2>
+            <p style="font-size: 12px; color: #86909c; margin-bottom: 20px;">验证成功！请设置您的新密码：</p>
+            <input type="password" id="newPassword" placeholder="请输入 6 位以上新密码">
+            <button class="btn btn-primary btn-full" onclick="handleUpdatePassword()">确认修改并登录</button>
+        </div>
     </div>
 
     <script>
-        async function handleForgetPassword() {
-    const email = document.getElementById('email').value.trim();
-    if (!email) {
-        return alert("请先在邮箱框输入您的账号，以便我们发送重置邮件。");
-    }
-
-    if (!confirm(`确定要向 ${email} 发送密码重置邮件吗？`)) return;
-
-    try {
-        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-            // 🌟 关键：重置成功后，让用户跳回到你的登录页重新设置
-            redirectTo: window.location.href, 
-        });
-
-        if (error) throw error;
-        alert("🔍 重置邮件已发出！\n\n请前往您的邮箱查看。点击邮件中的链接后，您将可以重新设置密码。");
-    } catch (err) {
-        alert("操作失败：" + err.message);
-    }
-}
-        // 你的专属钥匙
+        // 1. 初始化 Supabase
         const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        
-        let isLogin = true;
 
+        // 🌟 强力切换函数
+        function switchToResetMode() {
+            console.log("正在强行切换到重置密码界面...");
+            const auth = document.getElementById('authArea');
+            const reset = document.getElementById('resetArea');
+            if (auth) auth.classList.add('hidden');
+            if (reset) reset.classList.remove('hidden');
+        }
+
+        // 🌟 核心拦截逻辑：在页面加载的第一时间检查 URL Token
+        if (window.location.hash.includes("type=recovery") || window.location.hash.includes("access_token")) {
+            console.log("检测到令牌，正在锁定界面...");
+            // 立即切换 UI，不等 SDK 事件
+            switchToResetMode();
+        }
+
+        // 监听 Supabase 事件
+        supabaseClient.auth.onAuthStateChange((event, session) => {
+            console.log("Auth 事件触发:", event);
+            if (event === "PASSWORD_RECOVERY") {
+                switchToResetMode();
+            }
+        });
+
+        // --- 业务函数 ---
+        let isLogin = true;
         function toggleMode() {
             isLogin = !isLogin;
             document.getElementById('title').innerText = isLogin ? '🎬 AI 导演工作站' : '📝 开启导演之路';
             document.getElementById('mainBtn').innerText = isLogin ? '进入工作站' : '立即注册';
             document.getElementById('toggleLink').innerText = isLogin ? '没有账号？点击注册' : '已有账号？返回登录';
+            document.getElementById('forgetPwdLink').style.display = isLogin ? 'block' : 'none';
         }
 
-        // 🌟 新增核心魔法：自动同步积分账本
-        async function syncProfile(user) {
-            // 1. 先去 profiles 表里找找看有没有这个人
-            const { data: profile, error: searchError } = await supabaseClient
-                .from('profiles')
-                .select('*')
-                .eq('user_id', user.id)
-                .single();
+        async function handleForgetPassword() {
+            const email = document.getElementById('email').value.trim();
+            if (!email) return alert("请先在上方输入框填入邮箱！");
+            
+            const redirectUrl = window.location.origin + window.location.pathname;
 
-            if (profile) {
-                // 如果找到了，直接返回他的剩余积分
-                return profile.credits;
-            } else {
-                // 2. 如果没找到（说明是纯新用户），马上给他新建一行账本记录，发 100 积分！
-                const { data: newProfile, error: insertError } = await supabaseClient
-                    .from('profiles')
-                    .insert([
-                        { user_id: user.id, email: user.email, credits: 100 }
-                    ])
-                    .select()
-                    .single();
-                
-                if (insertError) {
-                    console.error("创建账本失败:", insertError);
-                    return 0;
-                }
-                return newProfile.credits;
+            try {
+                const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
+                if (error) throw error;
+                alert("🔍 重置邮件已发出！请前往邮箱查看并点击链接。");
+            } catch (err) {
+                alert("操作失败：" + err.message);
             }
+        }
+
+        async function handleUpdatePassword() {
+            const newPassword = document.getElementById('newPassword').value;
+            if (newPassword.length < 6) return alert("密码至少 6 位！");
+
+            try {
+                const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+                if (error) throw error;
+
+                alert("✅ 修改成功！正在进入工作台...");
+                
+                const user = (await supabaseClient.auth.getUser()).data.user;
+                const credits = await syncProfile(user);
+                
+                localStorage.setItem('userToken', 'auth_success');
+                localStorage.setItem('userEmail', user.email);
+                localStorage.setItem('userId', user.id);
+                localStorage.setItem('userCredits', credits);
+                location.href = 'dashboard.html';
+            } catch (err) {
+                alert("修改失败：" + err.message);
+            }
+        }
+
+        async function syncProfile(user) {
+            const { data: profile } = await supabaseClient.from('profiles').select('*').eq('user_id', user.id).single();
+            if (profile) return profile.credits;
+            const { data: newProfile, error: insertError } = await supabaseClient
+                .from('profiles').insert([{ user_id: user.id, email: user.email, credits: 0 }]).select().single();
+            return insertError ? 0 : newProfile.credits;
         }
 
         async function handleAuth() {
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
-            
-            if(!email || !password) return alert("请完整填写邮箱和密码！");
+            if(!email || !password) return alert("请完整填写！");
             
             const btn = document.getElementById('mainBtn');
-            btn.innerText = "⏳ 正在连接云端...";
+            btn.innerText = "⏳ 连接中...";
             btn.disabled = true;
 
             try {
-                let authResult;
-                
-                // 验证账号密码 或 注册新账号
-                if (isLogin) {
-                    authResult = await supabaseClient.auth.signInWithPassword({ email, password });
-                } else {
-                    authResult = await supabaseClient.auth.signUp({ email, password });
+                let res = isLogin ? 
+                    await supabaseClient.auth.signInWithPassword({ email, password }) : 
+                    await supabaseClient.auth.signUp({ email, password });
+
+                if (res.error) throw res.error;
+
+                if (!res.data.session) {
+                    alert("✅ 注册成功！请去邮箱激活。");
+                    if(!isLogin) toggleMode();
+                    return;
                 }
 
-                if (authResult.error) throw authResult.error;
-
-                // 🚨 核心修复：严密拦截空的 Session (凭证)
-                if (!authResult.data || !authResult.data.session) {
-                    if (!isLogin) {
-                        // 注册时没有返回凭证（说明被拦截去验证邮箱了）
-                        alert("✅ 账号创建成功！\n\n一封验证邮件已经发送到您的邮箱，请点击邮件中的链接激活账号，然后再来登录。");
-                        toggleMode(); 
-                        return; 
-                    } else {
-                        // 登录时没有返回凭证（说明邮箱还没验证）
-                        throw new Error("您的邮箱尚未验证！请前往邮箱点击激活链接后，再次尝试登录。");
-                    }
-                }
-
-                // --- 下面是安全拿到凭证后的正常逻辑 ---
-                const user = authResult.data.user;
-                const credits = await syncProfile(user);
-
-                // 把拿到的信息存在浏览器口袋里
-                localStorage.setItem('userToken', authResult.data.session.access_token);
-                localStorage.setItem('userEmail', user.email);
-                localStorage.setItem('userId', user.id);
-                localStorage.setItem('userCredits', credits); 
-
-                alert(`🎉 登录成功！当前积分: ${credits}`);
-                
-                // 跳转到你的主工作台
+                const credits = await syncProfile(res.data.user);
+                localStorage.setItem('userToken', res.data.session.access_token);
+                localStorage.setItem('userEmail', res.data.user.email);
+                localStorage.setItem('userId', res.data.user.id);
+                localStorage.setItem('userCredits', credits);
                 location.href = 'dashboard.html';
                 
             } catch (err) {
-                // 友好化报错信息
-                if (err.message.includes("Invalid login credentials")) {
-                    alert("❌ 登录失败：邮箱或密码错误。");
-                } else if (err.message.includes("Email not confirmed")) {
-                    alert("❌ 登录失败：请先前往邮箱点击验证链接！");
-                } else {
-                    alert("操作提示：" + err.message);
-                }
-                console.error(err);
-          } finally {
+                alert("提示：" + err.message);
+            } finally {
                 btn.innerText = isLogin ? "进入工作站" : "立即注册";
                 btn.disabled = false;
             }
-        } 
+        }
     </script>
-</body>
-</html>
 </body>
 </html>
