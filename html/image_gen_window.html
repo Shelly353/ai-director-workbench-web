@@ -162,30 +162,27 @@
             } catch (e) { console.error("获取积分失败:", e); }
         }
 
-        async function checkAndDeductCredits(cost, taskName) {
-            const userId = localStorage.getItem('userId');
-            if (!userId) { alert("登录已过期，请重新登录！"); return false; }
-            try {
-                const { data, error } = await supabaseClient.from('profiles').select('credits').eq('user_id', userId).single();
-                if (error || !data) throw new Error("查账失败");
-                
-                if (data.credits < cost) {
-                    alert(`❌ 积分不足！\n\n执行【${taskName}】需要 ${cost} 💎\n您当前剩余: ${data.credits} 💎`);
-                    return false;
-                }
-                
-                const newCredits = data.credits - cost;
-                await supabaseClient.from('profiles').update({ credits: newCredits }).eq('user_id', userId);
-                localStorage.setItem('userCredits', newCredits);
-                
-                // 扣费成功后更新顶部 UI
-                document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
-                if(typeof log === 'function') log(`💎 扣费成功：[${taskName}] 消耗 ${cost} 积分，剩余 ${newCredits} 💎。`);
-                return true; 
-            } catch (err) {
-                alert("计费系统网络异常，请稍后重试。"); return false;
-            }
-        }
+        // 🌟 统一的服务器端扣费接口
+async function checkAndDeductCredits(actionKey, modelName) {
+    const isGemini = modelName.toLowerCase().includes('gemini');
+    
+    // 直接调用服务器端的 RPC 函数
+    const { data: newCredits, error } = await supabaseClient.rpc('deduct_credits_v2', { 
+        action_key: actionKey, 
+        is_gemini: isGemini 
+    });
+
+    if (error) {
+        alert(`❌ 操作失败：${error.message}`);
+        return false;
+    }
+
+    // 扣费成功，更新 UI 显示
+    document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
+    localStorage.setItem('userCredits', newCredits);
+    log(`💎 服务器已结算：[${actionKey}] 扣费成功，剩余 ${newCredits} 💎。`);
+    return true;
+}
 
         // ==========================================
         // UI 与生图控制逻辑
