@@ -19,9 +19,30 @@
         <input type="password" id="password" placeholder="密码">
         <button class="btn btn-primary btn-full" id="mainBtn" onclick="handleAuth()">进入工作站</button>
         <span class="toggle-link" id="toggleLink" onclick="toggleMode()">没有账号？点击注册</span>
+<span class="toggle-link" id="forgetPwdLink" style="color: #86909c; font-size: 12px; margin-top: 10px;" onclick="handleForgetPassword()">忘记密码？</span>
     </div>
 
     <script>
+        async function handleForgetPassword() {
+    const email = document.getElementById('email').value.trim();
+    if (!email) {
+        return alert("请先在邮箱框输入您的账号，以便我们发送重置邮件。");
+    }
+
+    if (!confirm(`确定要向 ${email} 发送密码重置邮件吗？`)) return;
+
+    try {
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+            // 🌟 关键：重置成功后，让用户跳回到你的登录页重新设置
+            redirectTo: window.location.href, 
+        });
+
+        if (error) throw error;
+        alert("🔍 重置邮件已发出！\n\n请前往您的邮箱查看。点击邮件中的链接后，您将可以重新设置密码。");
+    } catch (err) {
+        alert("操作失败：" + err.message);
+    }
+}
         // 你的专属钥匙
         const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
