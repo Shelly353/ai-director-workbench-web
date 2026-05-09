@@ -110,18 +110,29 @@ window.uploadMediaToCloud = async function(source, fileExt = 'png') {
 // 在 app.js 中替换原来的 apiRequest
 async function apiRequest(endpoint, body) {
     try {
-        // 1. 动态确定服务器地址
         const baseURL = typeof API_BASE !== 'undefined' ? API_BASE : 'https://proxy-server-web.onrender.com';
         
-        // 2. 拿出登录通行证
-        const userToken = localStorage.getItem('userToken'); 
+        let validToken = "";
+
+        // 🌟 终极防弹逻辑：直接从 Supabase 获取当前最新、合法的 Token！
+        // 因为我们在 html 页面里已经定义了 supabaseClient，这里可以直接调用
+        if (typeof supabaseClient !== 'undefined') {
+            const { data: { session }, error } = await supabaseClient.auth.getSession();
+            if (error || !session) throw new Error("本地登录已失效，请退出重新登录！");
+            validToken = session.access_token;
+            
+            // 顺手把最新 token 塞回口袋更新一下
+            localStorage.setItem('userToken', validToken); 
+        } else {
+            // 如果没拿到 client，就作为备用从口袋里拿
+            validToken = localStorage.getItem('userToken');
+        }
         
-        // 3. 发送请求
         const res = await fetch(`${baseURL}${endpoint}`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json', 
-                'Authorization': `Bearer ${userToken}` // 🌟 关键：发送验证令牌
+                'Authorization': `Bearer ${validToken}` // 携带真 Token 闯关
             },
             body: JSON.stringify(body)
         });
@@ -133,7 +144,6 @@ async function apiRequest(endpoint, body) {
         
         return await res.json();
     } catch (e) {
-        // 如果页面上有 log 函数则记录日志
         if (typeof log === 'function') log(`❌ API 请求失败: ${e.message}`);
         console.error(e);
         throw e;
