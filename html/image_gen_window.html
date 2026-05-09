@@ -352,8 +352,8 @@ async function checkAndDeductCredits(actionKey, modelName) {
 
             if(!rawText.trim() && inlineImgs.length === 0) return alert("提示词不能为空！");
 
-            const cost = selectedModel.includes('gemini') ? 5 : 3;
-            if (!(await checkAndDeductCredits(cost, "高级工作台生图"))) return;
+// 🌟 核心：改为调用服务器端统一扣费逻辑
+            if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
 
             let sizeVal = "";
             if (selectedModel.includes('doubao')) {

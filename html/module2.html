@@ -254,10 +254,8 @@ window.onload = async () => {
                 endpoint: selectedLlm.includes('gemini') ? "/api/gemini/chat" : "/api/deepseek/chat"
             };
 
-           // 👇 插入这三行扣费代码 👇
-            const cost = selectedLlm.includes('gemini') ? 2 : 1;
-            if (!(await checkAndDeductCredits(cost, "AI 自动拆分剧本"))) return;
-            // 👆 插入结束 👆
+// 替换原本的 cost 计算和扣费
+if (!(await checkAndDeductCredits('split_script', selectedLlm))) return;
 
             // 🌟 强制保存回全局数据库，把旧的 Gemini 彻底盖掉！
             await DB.set('llm_config', config);
