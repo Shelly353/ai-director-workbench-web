@@ -100,7 +100,7 @@
             try {
                 let authResult;
                 
-                // 验证账号密码
+                // 验证账号密码 或 注册新账号
                 if (isLogin) {
                     authResult = await supabaseClient.auth.signInWithPassword({ email, password });
                 } else {
@@ -109,7 +109,20 @@
 
                 if (authResult.error) throw authResult.error;
 
-                // 🌟 账号密码验证通过后，立即去查账本拿积分！
+                // 🚨 核心修复：严密拦截空的 Session (凭证)
+                if (!authResult.data || !authResult.data.session) {
+                    if (!isLogin) {
+                        // 注册时没有返回凭证（说明被拦截去验证邮箱了）
+                        alert("✅ 账号创建成功！\n\n一封验证邮件已经发送到您的邮箱，请点击邮件中的链接激活账号，然后再来登录。");
+                        toggleMode(); 
+                        return; 
+                    } else {
+                        // 登录时没有返回凭证（说明邮箱还没验证）
+                        throw new Error("您的邮箱尚未验证！请前往邮箱点击激活链接后，再次尝试登录。");
+                    }
+                }
+
+                // --- 下面是安全拿到凭证后的正常逻辑 ---
                 const user = authResult.data.user;
                 const credits = await syncProfile(user);
 
@@ -117,7 +130,7 @@
                 localStorage.setItem('userToken', authResult.data.session.access_token);
                 localStorage.setItem('userEmail', user.email);
                 localStorage.setItem('userId', user.id);
-                localStorage.setItem('userCredits', credits); // 存入积分！
+                localStorage.setItem('userCredits', credits); 
 
                 alert(`🎉 登录成功！当前积分: ${credits}`);
                 
@@ -125,13 +138,19 @@
                 location.href = 'dashboard.html';
                 
             } catch (err) {
-                alert("操作失败：" + err.message);
+                // 友好化报错信息
+                if (err.message.includes("Invalid login credentials")) {
+                    alert("❌ 登录失败：邮箱或密码错误。");
+                } else if (err.message.includes("Email not confirmed")) {
+                    alert("❌ 登录失败：请先前往邮箱点击验证链接！");
+                } else {
+                    alert("操作提示：" + err.message);
+                }
                 console.error(err);
             } finally {
                 btn.innerText = isLogin ? "进入工作站" : "立即注册";
                 btn.disabled = false;
             }
-        }
     </script>
 </body>
 </html>
