@@ -73,8 +73,7 @@
             <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash</option>
         </select>
         
-        <label style="font-size: 12px; font-weight: bold;">比例:</label>
-        <select id="ratioSelect">
+   <select id="ratioSelect">
             <option value="16:9">16:9</option>
             <option value="9:16">9:16</option>
             <option value="21:9">21:9</option>
@@ -82,6 +81,12 @@
             <option value="4:3">4:3</option>
         </select>
         
+        <label style="font-size: 12px; font-weight: bold; margin-left: 10px;">分辨率:</label>
+        <select id="resolutionSelect">
+            <option value="1K">1K (标准)</option>
+            <option value="2K">2K (高清)</option>
+            <option value="4K">4K (超清)</option>
+        </select>
         <span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
     </div>
 
@@ -246,7 +251,11 @@ async function checkAndDeductCredits(actionKey, modelName) {
         };
 
         // --- 参考资产管理 ---
-        function openGlobalAssetModal() {
+        // 🌟 修复：加上 async，每次打开前强制同步云端
+        async function openGlobalAssetModal() {
+            const latestData = await DB.get('extractedData');
+            if (latestData) globalExtractedData = latestData;
+
             let pool = [];
             const add = (n,b) => { if(b && !pool.find(x=>x.b64===b)) pool.push({name:n, b64:b}); };
             
@@ -355,13 +364,28 @@ async function checkAndDeductCredits(actionKey, modelName) {
 // 🌟 核心：改为调用服务器端统一扣费逻辑
             if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
 
-            let sizeVal = "";
-            if (selectedModel.includes('doubao')) {
-                if (ratioVal === "9:16") sizeVal = "1440*2560"; else if (ratioVal === "1:1") sizeVal = "2048*2048"; else if (ratioVal === "21:9") sizeVal = "3440*1440"; else if (ratioVal === "4:3") sizeVal = "2304*1728"; else sizeVal = "2560*1440"; 
-            } else {
-                if (ratioVal === "9:16") sizeVal = "720*1280"; else if (ratioVal === "1:1") sizeVal = "1024*1024"; else if (ratioVal === "21:9") sizeVal = "1280*548"; else if (ratioVal === "4:3") sizeVal = "1024*768"; else sizeVal = "1920*1080"; 
+            // 🌟 新增：读取分辨率并动态计算生成尺寸
+            const resVal = document.getElementById('resolutionSelect').value;
+            let sizeVal = "1920*1080"; 
+            if (resVal === '1K') {
+                if (ratioVal === "9:16") sizeVal = "720*1280";
+                else if (ratioVal === "1:1") sizeVal = "1024*1024";
+                else if (ratioVal === "21:9") sizeVal = "1280*548";
+                else if (ratioVal === "4:3") sizeVal = "1024*768";
+                else sizeVal = "1280*720";
+            } else if (resVal === '2K') {
+                if (ratioVal === "9:16") sizeVal = "1440*2560";
+                else if (ratioVal === "1:1") sizeVal = "2048*2048";
+                else if (ratioVal === "21:9") sizeVal = "2560*1080";
+                else if (ratioVal === "4:3") sizeVal = "2048*1536";
+                else sizeVal = "2560*1440";
+            } else if (resVal === '4K') {
+                if (ratioVal === "9:16") sizeVal = "2160*3840";
+                else if (ratioVal === "1:1") sizeVal = "4096*4096";
+                else if (ratioVal === "21:9") sizeVal = "3840*1600";
+                else if (ratioVal === "4:3") sizeVal = "4096*3072";
+                else sizeVal = "3840*2160";
             }
-
             const stylePrefix = (globalStyle && STYLE_MODIFIERS[globalStyle]) ? STYLE_MODIFIERS[globalStyle] : "";
             const sysInject = inlineImgs.length > 1 ? "【系统指令：请识别提示词中的[参考图X]标识，将多个参考对象的特征融合】" : "";
             const finalPrompt = stylePrefix + sysInject + rawText;
@@ -465,30 +489,31 @@ async function checkAndDeductCredits(actionKey, modelName) {
             a.download = `AI_Gen_${Date.now()}.png`; a.click();
         }
 
-// 🌟 修改：变成 async 异步函数，以便执行数据库写入
-        async function confirmAndReturn() {
+    // 🌟 修改：变成 async 异步函数，以便执行数据库写入
+      async function confirmAndReturn() {
             if(!generatedB64) return;
             
-            // --- 🌟 核心新增逻辑：自动保存到全局资产 ---
+            // --- 🌟 终极修复：先拉取最新，再合并，防止数据覆盖！ ---
             try {
-                // 1. 确保全局资产对象存在（如果为空则初始化）
-                if (!globalExtractedData) globalExtractedData = { characters: [], scenes: [], props: [], effects: [] };
-                // 借用 props (道具) 类别来存放通用生图，也可以放 effects
-                if (!globalExtractedData.props) globalExtractedData.props = [];
+                // 1. 强制拉取云端最新资产库（防止把别人刚传的数据盖掉）
+                let latestData = await DB.get('extractedData');
+                if (!latestData) latestData = { characters: [], scenes: [], props: [], effects: [] };
+                if (!latestData.props) latestData.props = [];
                 
                 // 2. 生成一个唯一名称，防止重名
                 const assetName = "独立生图_" + Math.floor(Math.random() * 10000);
                 
-                // 3. 将新图片塞入全局数组
-                globalExtractedData.props.push({
+                // 3. 将新图片塞入全局数组的道具分类中
+                latestData.props.push({
                     name: assetName,
                     description: "高级工作台生成",
                     img: generatedB64,
                     refImages: []
                 });
                 
-                // 4. 保存回云端数据库
-                await DB.set('extractedData', globalExtractedData);
+                // 4. 保存回云端数据库，并更新本地内存
+                await DB.set('extractedData', latestData);
+                globalExtractedData = latestData; // 同步给当前页面的内存
                 log(`✅ 已同步保存至全局资产库: [${assetName}]`);
                 
             } catch (err) {
