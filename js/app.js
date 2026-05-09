@@ -107,27 +107,38 @@ window.uploadMediaToCloud = async function(source, fileExt = 'png') {
 // ==========================================
 // 🌟 4. 全局 API 请求封装
 // ==========================================
-// app.js 中的全家 API 请求中心
+// 在 app.js 中替换原来的 apiRequest
 async function apiRequest(endpoint, body) {
     try {
-        const userToken = localStorage.getItem('userToken'); // 🌟 从口袋里拿出登录时发的通行证
+        // 1. 动态确定服务器地址
+        const baseURL = typeof API_BASE !== 'undefined' ? API_BASE : 'https://proxy-server-web.onrender.com';
         
-        const res = await fetch(`${API_BASE}${endpoint}`, {
+        // 2. 拿出登录通行证
+        const userToken = localStorage.getItem('userToken'); 
+        
+        // 3. 发送请求
+        const res = await fetch(`${baseURL}${endpoint}`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json', 
-                'Authorization': `Bearer ${userToken}` // 🌟 必须改成这行，发送真 Token
+                'Authorization': `Bearer ${userToken}` // 🌟 关键：发送验证令牌
             },
             body: JSON.stringify(body)
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`HTTP ${res.status}: ${errorText}`);
+        }
+        
         return await res.json();
     } catch (e) {
-        log(`❌ API 请求失败: ${e.message}`);
+        // 如果页面上有 log 函数则记录日志
+        if (typeof log === 'function') log(`❌ API 请求失败: ${e.message}`);
+        console.error(e);
         throw e;
     }
 }
-
 // 底部日志打印功能
 function log(msg) {
     const consoleEl = document.getElementById('logConsole');
