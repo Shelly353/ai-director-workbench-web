@@ -404,10 +404,8 @@ function logout() {
             const styleName = (styleKey && STYLE_MODIFIERS[styleKey]) ? STYLE_MODIFIERS[styleKey].name : "默认风格";
             const selectedModel = document.getElementById('llmModelSelect').value || "deepseek-chat";
 
-           // 👇 插入这三行扣费代码 👇
-            const cost = selectedModel.includes('gemini') ? 2 : 1;
-            if (!(await checkAndDeductCredits(cost, "提取视觉四要素"))) return;
-            // 👆 插入结束 👆
+          // 替换原本的 cost 计算和扣费
+if (!(await checkAndDeductCredits('extract_elements', selectedModel))) return;
 
             log(`🚀 正在调用 [${selectedModel}] 发起剧本分析...`);
 
@@ -700,10 +698,8 @@ function logout() {
                 const currentLLM = document.getElementById('llmModelSelect').value || "deepseek-chat";
                 const name = extractedData[cat][idx].name;
 
-                // 👇 插入这三行扣费代码 👇
-                const cost = currentLLM.includes('gemini') ? 2 : 1;
-                if (!(await checkAndDeductCredits(cost, "AI 构思画面"))) return;
-                // 👆 插入结束 👆
+// 替换原本的 cost 计算和扣费
+if (!(await checkAndDeductCredits('ai_thought', currentLLM))) return;
 
                 inputEl.innerText = "🤖 思考中...";
                 let endpoint = currentLLM.startsWith('gemini') ? '/api/gemini/chat' : '/api/deepseek/chat';
@@ -780,11 +776,8 @@ async function genAssetImage(cat, idx, type) {
 
             const fullPrompt = `${stylePrefix}${template.prefix || ""}${rawText}${template.suffix || ""}`;
             
-
-             // 👇 插入这三行扣费代码 👇
-            const cost = selectedModel.includes('gemini') ? 5 : 3;
-            if (!(await checkAndDeductCredits(cost, "生成/重绘资产图片"))) return;
-            // 👆 插入结束 👆
+// 替换原本的 cost 计算和扣费
+if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
 
             log(`📝 提交生图指令: ${fullPrompt}`);
             if (imgBox) imgBox.innerHTML = `<span>🎨 正在生图...</span>`;
