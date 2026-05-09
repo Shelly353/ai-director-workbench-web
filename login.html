@@ -144,25 +144,37 @@ async function syncProfile(user) {
 
                 if (res.error) throw res.error;
 
+                // 如果是新注册，提示激活邮箱
                 if (!res.data.session) {
                     alert("✅ 注册成功！请去邮箱激活。");
                     if(!isLogin) toggleMode();
                     return;
                 }
 
-                const credits = await syncProfile(res.data.user);
-                localStorage.setItem('userToken', res.data.session.access_token);
-                localStorage.setItem('userEmail', res.data.user.email);
-                localStorage.setItem('userId', res.data.user.id);
-                localStorage.setItem('userCredits', credits);
-                location.href = 'dashboard.html';
+                // 🌟 这里就是添加延时逻辑的地方 🌟
+                // 确保登录成功后，给后台触发器（Trigger）留出 0.5 秒时间创建 profiles 记录
+                if (res.data.session) {
+                    btn.innerText = "⏳ 正在同步账户...";
+                    setTimeout(async () => {
+                        const credits = await syncProfile(res.data.user);
+                        // 调用下方定义的辅助函数保存数据并跳转
+                        saveLocalAndJump(res.data.user, credits, res.data.session.access_token);
+                    }, 500); 
+                }
                 
             } catch (err) {
                 alert("提示：" + err.message);
-            } finally {
                 btn.innerText = isLogin ? "进入工作站" : "立即注册";
                 btn.disabled = false;
             }
+        }
+// 辅助函数：统一保存用户信息到本地并跳转到工作台
+        function saveLocalAndJump(user, credits, token) {
+            localStorage.setItem('userToken', token);
+            localStorage.setItem('userEmail', user.email);
+            localStorage.setItem('userId', user.id);
+            localStorage.setItem('userCredits', credits);
+            location.href = 'dashboard.html';
         }
     </script>
 </body>
