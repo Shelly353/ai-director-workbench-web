@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 导演工作站 - 登录与积分系统</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .login-box { width: 350px; margin: 100px auto; background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        .btn-full { width: 100%; padding: 12px; margin-top: 20px; font-weight: bold; cursor: pointer;}
+        .toggle-link { margin-top: 15px; font-size: 13px; color: var(--primary); cursor: pointer; display: block; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body style="background: #f4f5f9;">
+    <div class="login-box">
+        <h2 id="title">🎬 AI 导演工作站</h2>
+        <input type="email" id="email" placeholder="邮箱地址">
+        <input type="password" id="password" placeholder="密码">
+        <button class="btn btn-primary btn-full" id="mainBtn" onclick="handleAuth()">进入工作站</button>
+        <span class="toggle-link" id="toggleLink" onclick="toggleMode()">没有账号？点击注册</span>
+    </div>
+
+    <script>
+        // 你的专属钥匙
+        const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        let isLogin = true;
+
+        function toggleMode() {
+            isLogin = !isLogin;
+            document.getElementById('title').innerText = isLogin ? '🎬 AI 导演工作站' : '📝 开启导演之路';
+            document.getElementById('mainBtn').innerText = isLogin ? '进入工作站' : '立即注册';
+            document.getElementById('toggleLink').innerText = isLogin ? '没有账号？点击注册' : '已有账号？返回登录';
+        }
+
+        // 🌟 新增核心魔法：自动同步积分账本
+        async function syncProfile(user) {
+            // 1. 先去 profiles 表里找找看有没有这个人
+            const { data: profile, error: searchError } = await supabaseClient
+                .from('profiles')
+                .select('*')
+                .eq('user_id', user.id)
+                .single();
+
+            if (profile) {
+                // 如果找到了，直接返回他的剩余积分
+                return profile.credits;
+            } else {
+                // 2. 如果没找到（说明是纯新用户），马上给他新建一行账本记录，发 100 积分！
+                const { data: newProfile, error: insertError } = await supabaseClient
+                    .from('profiles')
+                    .insert([
+                        { user_id: user.id, email: user.email, credits: 100 }
+                    ])
+                    .select()
+                    .single();
+                
+                if (insertError) {
+                    console.error("创建账本失败:", insertError);
+                    return 0;
+                }
+                return newProfile.credits;
+            }
+        }
+
+        async function handleAuth() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if(!email || !password) return alert("请完整填写邮箱和密码！");
+            
+            const btn = document.getElementById('mainBtn');
+            btn.innerText = "⏳ 正在连接云端...";
+            btn.disabled = true;
+
+            try {
+                let authResult;
+                
+                // 验证账号密码
+                if (isLogin) {
+                    authResult = await supabaseClient.auth.signInWithPassword({ email, password });
+                } else {
+                    authResult = await supabaseClient.auth.signUp({ email, password });
+                }
+
+                if (authResult.error) throw authResult.error;
+
+                // 🌟 账号密码验证通过后，立即去查账本拿积分！
+                const user = authResult.data.user;
+                const credits = await syncProfile(user);
+
+                // 把拿到的信息存在浏览器口袋里
+                localStorage.setItem('userToken', authResult.data.session.access_token);
+                localStorage.setItem('userEmail', user.email);
+                localStorage.setItem('userId', user.id);
+                localStorage.setItem('userCredits', credits); // 存入积分！
+
+                alert(`🎉 登录成功！当前积分: ${credits}`);
+                
+                // 跳转到你的主工作台
+                location.href = 'dashboard.html';
+                
+            } catch (err) {
+                alert("操作失败：" + err.message);
+                console.error(err);
+            } finally {
+                btn.innerText = isLogin ? "进入工作站" : "立即注册";
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

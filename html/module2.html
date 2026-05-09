@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 导演 - 步骤2：分镜匹配</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+/* 用户状态栏样式 */
+.user-panel { display: flex; align-items: center; gap: 15px; margin-left: 20px; }
+.credit-badge { background: #fff5f5; color: #ff6b6b; padding: 5px 12px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 13px; white-space: nowrap; }
+.logout-btn { color: #86909c; text-decoration: none; font-size: 13px; cursor: pointer; transition: 0.2s; }
+.logout-btn:hover { color: #f53f3f; }
+        .header { position: sticky; top: 0; z-index: 1000; background: #ffffff; padding: 20px 25px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e6eb; box-shadow: 0 4px 12px rgba(0,0,0,0.08); min-height: 80px; box-sizing: border-box; }
+        .steps { display: flex; gap: 20px; font-size: 15px; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; height: 38px; line-height: 1; padding: 0 18px; white-space: nowrap; font-size: 14px; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
+        .main-container { margin-top: 30px; padding: 0 20px 80px 20px; max-width: 1100px; margin-left: auto; margin-right: auto; }
+        .storyboard-row { display: flex; flex-direction: column; background: #fff; padding: 20px; border-radius: 10px; border: 1px solid #e5e6eb; margin-bottom: 25px; box-shadow: 0 2px 12px rgba(0,0,0,0.03); }
+        .rich-input { white-space: pre-wrap; text-align: left; width: 100%; min-height: 80px; max-height: 400px; overflow-y: auto; padding: 15px; box-sizing: border-box; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; font-size: 14px; line-height: 1.6; background: #fff; margin-bottom: 15px; transition: border-color 0.2s; }
+        .rich-input:focus { border-color: var(--primary); }
+        .rich-input:empty:before { content: attr(data-placeholder); color: #c0c4cc; pointer-events: none; }
+        .inline-pill { display: inline-flex; align-items: center; background: #e8f3ff; border: 1px solid #bcdcff; border-radius: 4px; padding: 2px 8px; margin: 0 4px; vertical-align: middle; cursor: default; font-size:12px; color:var(--primary); }
+        .inline-pill img { width: 18px; height: 18px; object-fit: cover; border-radius: 2px; margin-right: 4px; }
+        .console-wrapper { position: fixed; bottom: 0; left: 0; width: 100%; background: #1e1e1e; z-index: 9000; transition: transform 0.3s ease; transform: translateY(calc(100% - 30px)); border-top: 1px solid #444; }
+        .console-wrapper.open { transform: translateY(0); }
+        .console-header { height: 30px; background: #2d2d2d; color: #ccc; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-size: 12px; cursor: pointer; }
+        .console-content { height: 180px; padding: 15px 20px; color: #4af626; font-family: 'Consolas', monospace; font-size: 12px; overflow-y: auto; box-sizing: border-box; white-space: pre-wrap;}
+        #hoverPreview { display: none; position: fixed; z-index: 9999; background: #fff; padding: 5px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); pointer-events: none; border: 1px solid #eee; }
+        #hoverPreview img { max-width: 300px; max-height: 300px; border-radius: 4px; display: block; }
+        select { height: 34px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 0 10px; background-color: #fff; outline: none; color: #606266; }
+        .modal-bg { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:4000; justify-content:center; align-items:center; }
+        .modal-content { background:#fff; width:80%; max-width:700px; border-radius:12px; padding:25px; max-height:85vh; display:flex; flex-direction:column; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        .modal-close { cursor:pointer; font-size:24px; color:#86909c; line-height:1; transition: 0.2s; }
+        .modal-close:hover { color:#f53f3f; }
+    </style>
+</head>
+<body>
+<div class="header">
+        <div style="display:flex; align-items:center;">
+            <button class="btn btn-outline" onclick="saveAndBack()" style="margin-right: 20px; padding: 8px 15px; border-color: #e5e6eb;">🏠 返回项目</button>
+            
+            <div class="steps">
+                <div class="step">1. 剧本设定分析</div>
+                <div class="step active">2. 分镜匹配</div>
+                <div class="step">3. 视频生成</div>
+            </div>
+        </div> 
+<div style="display:flex; gap:12px; align-items:center;">
+<span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
+    <a class="logout-btn" style="margin-right:15px;" onclick="logout()">退出</a>
+            <select id="g_ratio">
+                <option value="16:9">16:9 横屏</option>
+                <option value="9:16">9:16 竖屏</option>
+                <option value="21:9">21:9 宽银幕</option>
+                <option value="4:3">4:3 电视</option>
+            </select>
+            <button class="btn btn-outline" onclick="location.href='../module1.html'">上一步</button>
+            <button id="btnNextStep" class="btn btn-primary" onclick="goToStep3()">下一步 (生成视频)</button>
+        </div>
+    </div> <div class="main-container">
+        <div style="display:flex; justify-content:space-between; margin-bottom:25px; align-items:center;">
+            <h3 style="margin:0;">智能分镜拆解</h3>
+
+<div style="display:flex; gap:12px;">
+               <select id="llmModelSelect" style="min-width: 150px; font-weight: bold; color: var(--primary);">
+                    <option value="deepseek-chat">🧠 DeepSeek</option>
+                    <option value="gemini-3-flash-preview">🧠 Gemini 3.1 Flash</option>
+                </select>
+                
+                <select id="splitMethodSelect" style="min-width: 180px;">
+                    <option value="split_scene">连续场景法 (资深导演视角)</option>
+                </select>
+                <button id="btnSplit" class="btn btn-primary" onclick="autoSplitStoryboard()">✨ AI 自动拆分剧本</button>
+            </div>
+        </div>
+        
+        <div id="storyboardList">
+            <div style="color:#909399; text-align:center; padding: 60px; background:#f8f9fa; border-radius:12px; border:2px dashed #ebeef5;">
+                点击右上角按钮开始 AI 自动拆解，或点击下方按钮手动构建分镜。
+            </div>
+        </div>
+        
+        <button class="btn btn-outline" style="width: 100%; padding: 15px; margin: 30px 0; border-style: dashed; color: #909399; height: auto;" onclick="addManualStoryboard()">
+            + 手动添加分镜块
+        </button>
+    </div>
+
+    <div id="mentionMenu" style="display:none; position:fixed; background:#fff; border:1px solid #ddd; padding:8px; border-radius:8px; z-index:1000; box-shadow:0 8px 24px rgba(0,0,0,0.15); width: 260px; max-height:200px; overflow-y:auto;">
+        <div style="font-size:11px; color:#888; margin-bottom:5px;">选择要引用的镜内参考图：</div>
+        <div id="mentionMenuGrid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px;"></div>
+    </div>
+
+<div id="globalImportModal" class="modal-bg">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px;">
+                <h3 style="margin:0;">📥 从全局图库提取资产至当前分镜</h3>
+                <span class="modal-close" onclick="closeGlobalImport()">×</span>
+            </div>
+            <div id="globalImportGrid" style="display:flex; flex-wrap:wrap; gap:15px; overflow-y:auto; flex:1; padding-top:10px;"></div>
+        </div>
+    </div>
+
+    <div id="imageGenModalBg" class="modal-bg" style="z-index: 5000;">
+        <div class="modal-content" style="width: 95%; max-width: 1200px; height: 90vh; padding: 0; overflow: hidden; position: relative;">
+            <div class="modal-close" style="position: absolute; top: 15px; right: 20px; z-index: 10;" onclick="closeImageGenModal()">×</div>
+            <iframe id="imageGenFrame" src="" style="width: 100%; height: 100%; border: none; border-radius: 12px;"></iframe>
+        </div>
+    </div>
+
+    <div id="hoverPreview"><img id="hoverImg" src=""></div>
+
+    <div class="console-wrapper" id="consoleWrapper">
+        <div class="console-header" onclick="toggleConsole()">
+            <span>📝 终端运行日志</span>
+            <span id="consoleToggleIcon">▲ 点击展开</span>
+        </div>
+        <div class="console-content" id="logConsole"></div>
+    </div>
+
+    <script src="../js/app.js"></script>
+    <script src="../js/prompts/split_scene.js"></script>
+    
+    <script>
+        let storyboardData = [];
+        let extractedData = { characters: [], scenes: [], props: [], effects: [] };
+        let savedRange = null;
+        let currentImportRowId = null;
+// ==========================================
+// 🌟 核心：Supabase 数据库连接与通用扣费系统
+// ==========================================
+const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// 🌟 新增：从云端数据库获取并显示实际积分
+async function fetchCredits() {
+    const userId = localStorage.getItem('userId');
+    if (!userId) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from('profiles')
+            .select('credits')
+            .eq('user_id', userId)
+            .single();
+        if (data) {
+            // 将云端积分渲染到页面右上角
+            document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
+            localStorage.setItem('userCredits', data.credits);
+        }
+    } catch (e) {
+        console.error("获取积分失败:", e);
+    }
+}
+
+async function checkAndDeductCredits(cost, taskName) {
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+        alert("登录已过期，请重新登录！");
+        return false;
+    }
+    try {
+        // 1. 实时查账
+        const { data, error } = await supabaseClient.from('profiles').select('credits').eq('user_id', userId).single();
+        if (error || !data) throw new Error("查账失败");
+        
+        // 2. 判断余额
+        if (data.credits < cost) {
+            alert(`❌ 积分不足！\n\n执行【${taskName}】需要 ${cost} 💎\n您当前剩余: ${data.credits} 💎\n请充值后重试。`);
+            return false; // 余额不足，拒绝放行
+        }
+        
+        // 3. 执行云端扣费
+        const newCredits = data.credits - cost;
+        const { error: updateError } = await supabaseClient.from('profiles').update({ credits: newCredits }).eq('user_id', userId);
+        if (updateError) throw updateError;
+        
+        // 4. 扣费成功，更新本地口袋并打印日志
+        localStorage.setItem('userCredits', newCredits);
+        if(typeof log === 'function') log(`💎 扣费成功：[${taskName}] 消耗 ${cost} 积分，剩余 ${newCredits} 💎。`);
+        return true; // 放行！
+    } catch (err) {
+        console.error("扣费异常:", err);
+        alert("计费系统网络异常，请稍后重试。");
+        return false;
+    }
+}
+// ==========================================
+
+// 🌟 新增：保存当前进度并返回
+async function saveAndBack() {
+            try {
+                syncRichTextState();
+                await DB.set('storyboardData', storyboardData);
+                await DB.set('globalRatio', document.getElementById('g_ratio').value);
+                // 🌟 修复点：添加 ../ 前缀
+                location.href = '../dashboard.html'; 
+            } catch (e) {
+                location.href = '../dashboard.html';
+            }
+        }
+
+window.onload = async () => {
+
+    // 🌟 核心安全：检查登录凭证
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+        // 如果没有找到身份信息，不给任何提示，直接强行踢回登录页
+        // 使用 replace 而不是 href，是为了不让用户再通过“返回”跳回来
+        window.location.replace('index.html'); 
+        return;
+    }
+            await fetchCredits();
+            log(`系统就绪。正在加载全局视觉资产及模型配置...`);
+            storyboardData = await DB.get('storyboardData') || [];
+            extractedData = await DB.get('extractedData') || { characters: [], scenes: [], props: [], effects: [] };
+            
+            const savedRatio = await DB.get('globalRatio');
+            if (savedRatio) document.getElementById('g_ratio').value = savedRatio;
+            
+            if (storyboardData.length > 0) renderStoryboardUI();
+
+            // 🌟 核心修复：改用 'llmModelSelect' 读取 index 页面存下的模型
+         // 🌟 核心修复：读取 index 页面存下的真实键名 'llmModelSelect'
+            // 🌟 直接赋值，不再做画蛇添足的判断
+            const savedLlm = await DB.get('llmModelSelect');
+            if (savedLlm) {
+                log(`🧠 已识别全局大语言模型：${savedLlm}`);
+                const llmSelect = document.getElementById('llmModelSelect');
+                if (llmSelect) llmSelect.value = savedLlm;
+            }
+        };
+
+        function toggleConsole() {
+            const wrapper = document.getElementById('consoleWrapper');
+            const icon = document.getElementById('consoleToggleIcon');
+            wrapper.classList.toggle('open');
+            icon.innerText = wrapper.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开';
+        }
+
+        function log(msg) {
+            const consoleEl = document.getElementById('logConsole');
+            if (consoleEl) {
+                const time = new Date().toLocaleTimeString();
+                consoleEl.innerText += `[${time}] ${msg}\n`;
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
+        }
+
+        async function autoSplitStoryboard() {
+            const scriptText = await DB.get('scriptText');
+            if (!scriptText) return alert("未找到剧本内容，请返回第一步重新输入！");
+            
+            const btn = document.getElementById('btnSplit');
+            const methodKey = document.getElementById('splitMethodSelect').value;
+            const currentRatio = document.getElementById('g_ratio').value;
+            
+            // 🌟 补丁 3：直接读取当前页面的模型选择，强制组装配置
+     // 🌟 终极修复：原封不动地把选中的代号发给后端！
+            const selectedLlm = document.getElementById('llmModelSelect').value;
+            let config = {
+                model: selectedLlm,
+                endpoint: selectedLlm.includes('gemini') ? "/api/gemini/chat" : "/api/deepseek/chat"
+            };
+
+           // 👇 插入这三行扣费代码 👇
+            const cost = selectedLlm.includes('gemini') ? 2 : 1;
+            if (!(await checkAndDeductCredits(cost, "AI 自动拆分剧本"))) return;
+            // 👆 插入结束 👆
+
+            // 🌟 强制保存回全局数据库，把旧的 Gemini 彻底盖掉！
+            await DB.set('llm_config', config);
+
+            const defaultPrompt = "请仔细阅读以下剧本，将其拆分成多个连续的分镜画面。";
+            const llmPromptTpl = (window.AI_PROMPTS && window.AI_PROMPTS[methodKey]) ? window.AI_PROMPTS[methodKey].llmPrompt : defaultPrompt;
+
+            btn.disabled = true;
+            btn.innerText = `⏳ [${config.model}] 正在构思分镜...`;
+            log(`🚀 正在调用 [${config.model}] 生成分镜脚本...`);
+            
+            const finalPrompt = llmPromptTpl.replace(/{script}/g, scriptText).replace(/{ratio}/g, currentRatio);
+
+            // 🌟 核心修复：为强制 JSON 模式提供数组包裹模版
+            const strictFormat = `
+必须且只能返回包含 "storyboard" 字段的 JSON 对象，该字段是一个数组，每个元素包含 id 和 text 两个属性：
+{
+  "storyboard": [
+    {
+      "id": "1",
+      "text": "镜头1描述..."
+    }
+  ]
+}`;
+
+            try {
+// 🌟 终极修复：彻底抛弃 system 角色，将所有指令合入 user 消息
+                // 实践证明，这是绕过 Google API 404 错误的最稳定方案
+                const res = await apiRequest(config.endpoint, {
+                    model: config.model,
+                    stream: false,
+                    messages: [
+                        { 
+                            role: "user", 
+                            content: `你是一位资深分镜导演。请将剧本拆分为适合视觉表现的独立分镜块。\n${strictFormat}\n\n指令与剧本：\n${finalPrompt}` 
+                        }
+                    ]
+                });   
+               // 获取大模型返回的原始字符串
+                // 获取大模型返回的原始字符串
+                let rawText = "";
+                if (res.choices && res.choices[0].message) rawText = res.choices[0].message.content;
+                else if (res.candidates && res.candidates[0].content) rawText = res.candidates[0].content.parts[0].text;
+                else throw new Error("无法解析API返回的数据格式");
+
+                console.log("📦 AI 原始返回内容:", rawText);
+
+                // 🌟 1. 清理 Markdown 标记
+                let cleanJson = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+                // 🌟 2. 找到真正的 JSON 起点 (定位第一个 { 或 [)
+                const startIdx = Math.max(0, cleanJson.search(/[\{\[]/));
+                cleanJson = cleanJson.substring(startIdx);
+
+                // 🌟 3. 终极容错解析：暴力剥离 AI 幻觉产生的多余括号
+                let parsed = null;
+                let endChar = cleanJson.startsWith('[') ? ']' : '}';
+                let lastIdx = cleanJson.lastIndexOf(endChar);
+
+                while (lastIdx !== -1) {
+                    try {
+                        let candidate = cleanJson.substring(0, lastIdx + 1);
+                        parsed = JSON.parse(candidate);
+                        break; // 🌟 只要解析成功，立刻跳出循环
+                    } catch (e) {
+                        // 解析失败，说明当前最末尾的括号是多余的（比如幻觉产生的 } } ）
+                        // 往前寻找上一个 } 或 ] 继续尝试
+                        lastIdx = cleanJson.lastIndexOf(endChar, lastIdx - 1);
+                    }
+                }
+
+                if (!parsed) {
+                    console.error("❌ JSON 彻底解析失败:", cleanJson);
+                    throw new Error("模型返回内容损坏，无法修复为 JSON。");
+                }
+
+                // 🌟 4. 兼容性提取 (防止 AI 把数组包裹在 {"storyboard": [...]} 等千奇百怪的壳里)
+                let segments = [];
+                if (Array.isArray(parsed)) {
+                    segments = parsed;
+                } else if (parsed.storyboard && Array.isArray(parsed.storyboard)) {
+                    segments = parsed.storyboard;
+                } else if (parsed.data && Array.isArray(parsed.data)) {
+                    segments = parsed.data;
+                } else if (Object.values(parsed)[0] && Array.isArray(Object.values(parsed)[0])) {
+                    segments = Object.values(parsed)[0];
+                } else {
+                    segments = [parsed]; 
+                }
+                
+                if(segments.length === 0) throw new Error("未提取到任何分镜数据。");
+
+                storyboardData = segments.map((seg, i) => ({
+                    id: seg.id || (i + 1).toString(),
+                    text: seg.text || seg.description || JSON.stringify(seg),
+                    htmlText: "", 
+                    duration: 15, 
+                    images: [] 
+                }));
+                
+                autoMatchImages();
+                renderStoryboardUI();
+                log("✅ 自动拆分完成。已根据关键词自动关联场景与角色图片。");
+} catch (e) {
+                let errMsg = e.message;
+                // 🌟 将 503 (服务器繁忙) 和 500 也加入自动切换保护伞
+                if (errMsg.includes('limit: 0') || errMsg.includes('429') || errMsg.includes('404') || errMsg.includes('503') || errMsg.includes('500')) {
+                    log(`⚠️ 触发 Google 接口限制或服务器繁忙，已自动为您切换至 DeepSeek。`);
+                    alert(`Google 服务器当前繁忙或受限 (High Demand)。\n\n系统已为您自动切换至稳定的【DeepSeek】模型，请再次点击“自动拆分”即可！`);
+                    
+                    // 同步修改页面显示并存入数据库
+                    document.getElementById('llmModelSelect').value = 'deepseek-chat';
+                    await DB.set('llmModelSelect', 'deepseek-chat');
+                } else {
+                    log("❌ 拆分异常: " + errMsg);
+                    alert("拆分失败：" + errMsg);
+                }
+           
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "✨ AI 自动拆分剧本";
+            }
+        }
+
+        function autoMatchImages() {
+            storyboardData.forEach(row => {
+                const matchAndAdd = (name, b64, refs) => { 
+                    if(row.text.includes(name)) {
+                        if(b64) row.images.push(b64);
+                        if(refs && refs.length > 0) row.images.push(...refs);
+                    }
+                };
+                if(extractedData.characters) extractedData.characters.forEach(c => matchAndAdd(c.name, c.img, c.refImages));
+                if(extractedData.props) extractedData.props.forEach(p => matchAndAdd(p.name, p.img, p.refImages));
+                if(extractedData.effects) extractedData.effects.forEach(e => matchAndAdd(e.name, e.img, e.refImages));
+                if(extractedData.scenes) {
+                    extractedData.scenes.forEach(s => {
+                        if (row.text.includes(s.name)) {
+                            if (row.text.includes("反打") || row.text.includes("看向")) {
+                                if(s.reverseImg) row.images.push(s.reverseImg);
+                            } else {
+                                if(s.forwardImg) row.images.push(s.forwardImg);
+                            }
+                            if(s.refImages && s.refImages.length > 0) row.images.push(...s.refImages);
+                        }
+                    });
+                }
+                row.images = [...new Set(row.images)];
+            });
+        }
+
+       // 🌟 新增：在指定格子的正下方插入新分镜块
+        function insertStoryboardBlock(index) {
+            syncRichTextState(); // 必须先保存所有文本，防止重绘时丢失正在输入的内容
+            
+            // 使用时间戳确保插入的 ID 绝对唯一
+            const newId = "手动_" + Date.now().toString().slice(-5); 
+            const newBlock = {
+                id: newId,
+                text: "【场景】：待填写\n【情绪点】：待填写\n【脚本描述】：待填写",
+                htmlText: "",
+                duration: 15,
+                images: []
+            };
+            
+            // 在当前索引的下一个位置插入新模块
+            storyboardData.splice(index + 1, 0, newBlock);
+            renderStoryboardUI();
+        }
+
+        // 🌟 更新：修复底部全局添加按钮的 ID 冲突和状态丢失问题
+        function addManualStoryboard() {
+            if (storyboardData.length === 0) document.getElementById('storyboardList').innerHTML = "";
+            syncRichTextState(); // 同样先保存文本状态
+            
+            const newId = "手动_" + Date.now().toString().slice(-5);
+            storyboardData.push({
+                id: newId,
+                text: "【场景】：待填写\n【情绪点】：待填写\n【脚本描述】：待填写",
+                htmlText: "",
+                duration: 15,
+                images: []
+            });
+            
+            renderStoryboardUI();
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }
+
+function renderStoryboardUI() {
+            const listDiv = document.getElementById('storyboardList');
+            if (storyboardData.length === 0) {
+                listDiv.innerHTML = `<div style="color:#909399; text-align:center; padding: 60px; background:#f8f9fa; border-radius:12px; border:2px dashed #ebeef5;">点击右上角按钮开始拆分剧本。</div>`;
+                return;
+            }
+
+            listDiv.innerHTML = storyboardData.map((row, index) => `
+                <div class="storyboard-row">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <div style="font-size: 15px; font-weight: bold; color: #1d2129;">分镜块 ${row.id}</div>
+                        <div style="display:flex; gap:15px; align-items:center; font-size:12px; color:#86909c;">
+                            <span>时长:
+                                <select onchange="updateSbDuration('${row.id}', this.value)">
+                                    <option value="5" ${row.duration==5?'selected':''}>5s</option>
+                                    <option value="6" ${row.duration==6?'selected':''}>6s</option>
+                                    <option value="7" ${row.duration==7?'selected':''}>7s</option>
+                                    <option value="8" ${row.duration==8?'selected':''}>8s</option>
+                                    <option value="9" ${row.duration==9?'selected':''}>9s</option>
+                                    <option value="10" ${row.duration==10?'selected':''}>10s</option>
+                                    <option value="11" ${row.duration==11?'selected':''}>11s</option>
+                                    <option value="12" ${row.duration==12?'selected':''}>12s</option>
+                                    <option value="13" ${row.duration==13?'selected':''}>13s</option>
+                                    <option value="14" ${row.duration==14?'selected':''}>14s</option>
+                                    <option value="15" ${row.duration==15?'selected':''}>15s</option>
+                                </select>
+                            </span>
+                            <span style="color:#f53f3f; cursor:pointer;" onclick="deleteStoryboard(${index})">🗑️ 删除</span>
+                        </div>
+                    </div>
+                    
+                    <div class="rich-input" id="sb_text_${row.id}" contenteditable="true" data-placeholder="输入表演细节... 输入 @ 插入镜内图片">${row.htmlText || row.text}</div>
+                    
+                    <div style="padding-top: 15px; border-top: 1px dashed #f2f3f5;">
+                        <div style="font-size:12px; font-weight:bold; margin-bottom:10px; color:#4e5969;">
+                            🖼️ 镜内参考图片
+                            <div style="float:right; display:flex; gap:15px;">
+                                <span style="cursor:pointer; color:#722ed1; font-weight:bold;" onclick="openImageGenModal('${row.id}')" title="打开高级生图工作台">🎨 AI 独立生图</span>
+                                <span style="cursor:pointer; color:var(--primary);" onclick="openGlobalImport('${row.id}')" title="从第一步中查找未被自动匹配的图片">📥 导入全局资产</span>
+                                <span style="cursor:pointer; color:var(--primary);" onclick="uploadSbImg('${row.id}')" title="上传本地图片">⊕ 本地上传</span>
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-wrap:wrap; gap:12px;">
+                            ${row.images.map((b64, imgIdx) => `
+                                <div style="position:relative; width:100px; height:100px; border-radius:6px; overflow:hidden; border:1px solid #f2f3f5; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                                    <img src="${b64}" style="width:100%; height:100%; object-fit:cover;">
+                                    <div onclick="removeSbImg('${row.id}', ${imgIdx})" style="position:absolute; top:4px; right:4px; background:rgba(245,63,63,0.9); color:#fff; border-radius:50%; width:18px; height:18px; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:10px;">×</div>
+                                </div>
+                            `).join('')}
+                            ${row.images.length === 0 ? '<span style="font-size:12px; color:#c9cdd4;">暂无镜内图片，请点击右侧导入全局资产或本地上传。</span>' : ''}
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: -15px; margin-bottom: 25px; position: relative; z-index: 2;">
+                    <button class="btn btn-outline" style="font-size: 12px; padding: 4px 16px; border-radius: 20px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.06);" onclick="insertStoryboardBlock(${index})">+ 在此下方插入新分镜</button>
+                </div>
+            `).join('');
+
+            document.querySelectorAll('.rich-input').forEach(el => { el.addEventListener('input', handleRichInput); });
+        }
+
+        function openGlobalImport(rowId) {
+            currentImportRowId = rowId;
+            let pool = [];
+            const add = (n,b) => { if(b && !pool.find(x=>x.b64===b)) pool.push({name:n, b64:b}); };
+            
+            if(extractedData.characters) extractedData.characters.forEach(c => { add(c.name, c.img); if(c.refImages) c.refImages.forEach((r,i)=>add(c.name+'-参考', r)); });
+            if(extractedData.props) extractedData.props.forEach(p => { add(p.name, p.img); if(p.refImages) p.refImages.forEach((r,i)=>add(p.name+'-参考', r)); });
+            if(extractedData.effects) extractedData.effects.forEach(e => { add(e.name, e.img); if(e.refImages) e.refImages.forEach((r,i)=>add(e.name+'-参考', r)); });
+            if(extractedData.scenes) extractedData.scenes.forEach(s => { add(s.name+'-正视', s.forwardImg); add(s.name+'-反打', s.reverseImg); if(s.refImages) s.refImages.forEach((r,i)=>add(s.name+'-参考', r)); });
+
+            if (pool.length === 0) return alert("第一步中没有生成或上传任何资产！");
+
+            document.getElementById('globalImportGrid').innerHTML = pool.map(item => `
+                <div style="width:110px; cursor:pointer; text-align:center; transition:0.2s; border:2px solid transparent; border-radius:8px; padding:5px;" 
+                     onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'"
+                     onclick="confirmGlobalImport('${item.b64}')">
+                    <img src="${item.b64}" style="width:100px; height:100px; object-fit:cover; border-radius:6px; border:1px solid #e5e6eb;">
+                    <div style="font-size:11px; color:#4e5969; margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${item.name}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('globalImportModal').style.display = 'flex';
+        }
+
+        function confirmGlobalImport(b64) {
+            syncRichTextState(); 
+            const row = storyboardData.find(x => x.id == currentImportRowId);
+            if (row && !row.images.includes(b64)) {
+                row.images.push(b64);
+                renderStoryboardUI();
+            }
+            closeGlobalImport();
+        }
+
+        function closeGlobalImport() {
+            document.getElementById('globalImportModal').style.display = 'none';
+            currentImportRowId = null;
+        }
+
+        function deleteStoryboard(index) {
+            if (confirm("确定删除此镜头？")) {
+                syncRichTextState();
+                storyboardData.splice(index, 1);
+                renderStoryboardUI();
+            }
+        }
+
+        function updateSbDuration(id, val) { const row = storyboardData.find(x => x.id == id); if(row) row.duration = parseInt(val); }
+        
+function uploadSbImg(id) {
+    triggerUpload(async (b64) => {
+        syncRichTextState();
+        log("⏳ 正在同步图片至云盘...");
+        b64 = await window.uploadMediaToCloud(b64, 'png');
+        const row = storyboardData.find(x => x.id == id);
+        if(row) { row.images.push(b64); renderStoryboardUI(); }
+    });
+}
+        
+        function removeSbImg(id, imgIdx) {
+            syncRichTextState();
+            const row = storyboardData.find(x => x.id == id);
+            if(row) { row.images.splice(imgIdx, 1); renderStoryboardUI(); }
+        }
+
+        function syncRichTextState() {
+            storyboardData.forEach(row => {
+                const richEl = document.getElementById(`sb_text_${row.id}`);
+                if(richEl) row.htmlText = richEl.innerHTML;
+            });
+        }
+
+        function handleRichInput(e) {
+            const sel = window.getSelection();
+            if(sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            const text = range.startContainer.textContent.substring(0, range.startOffset);
+            if (text.endsWith('@')) {
+                const rowId = e.target.id.replace('sb_text_', '');
+                const row = storyboardData.find(x => x.id == rowId);
+                if (!row || !row.images || row.images.length === 0) return;
+                savedRange = range.cloneRange();
+                const rect = range.getBoundingClientRect();
+                const menu = document.getElementById('mentionMenu');
+                menu.style.display = 'block';
+                menu.style.left = rect.left + 'px';
+                menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+                document.getElementById('mentionMenuGrid').innerHTML = row.images.map((b64, index) => `
+                    <div style="aspect-ratio:1; border-radius:4px; overflow:hidden; cursor:pointer; border:1px solid #f2f3f5;" onmousedown="event.preventDefault();insertMentionPill('${b64}', '图${index+1}')">
+                        <img src="${b64}" style="width:100%;height:100%;object-fit:cover;">
+                    </div>
+                `).join('');
+            } else {
+                document.getElementById('mentionMenu').style.display = 'none';
+            }
+        }
+
+        function insertMentionPill(b64, name) {
+            document.getElementById('mentionMenu').style.display = 'none';
+            const sel = window.getSelection();
+            sel.removeAllRanges(); sel.addRange(savedRange);
+            savedRange.setStart(savedRange.startContainer, savedRange.startOffset - 1);
+            savedRange.deleteContents();
+            const span = document.createElement('span');
+            span.className = 'inline-pill'; span.contentEditable = 'false'; span.setAttribute('data-b64', b64);
+            span.innerHTML = `<img src="${b64}"><span>${name}</span>`;
+            span.onmouseenter = (e) => {
+                const hp = document.getElementById('hoverPreview');
+                document.getElementById('hoverImg').src = b64;
+                hp.style.display = 'block'; hp.style.left = (e.clientX + 15) + 'px'; hp.style.top = (e.clientY + 15) + 'px';
+            };
+            span.onmouseleave = () => document.getElementById('hoverPreview').style.display = 'none';
+            savedRange.insertNode(span);
+            savedRange.setStartAfter(span); savedRange.insertNode(document.createTextNode('\u00A0'));
+            savedRange.collapse(false); sel.removeAllRanges(); sel.addRange(savedRange);
+        }
+
+        async function goToStep3() {
+            const btn = document.getElementById('btnNextStep');
+            const origText = btn.innerText;
+            btn.innerText = "⏳ 正在保存无损高清资产...";
+            btn.disabled = true;
+
+            try {
+                for (let row of storyboardData) {
+                    const richEl = document.getElementById(`sb_text_${row.id}`);
+                    if(richEl) {
+                        let pText = ""; let localImgs = [];
+                        row.htmlText = richEl.innerHTML; 
+                        richEl.childNodes.forEach(node => {
+                            if (node.nodeType === Node.TEXT_NODE) pText += node.textContent;
+                            else if (node.nodeType === Node.ELEMENT_NODE) {
+                                if (node.classList.contains('inline-pill')) localImgs.push(node.getAttribute('data-b64'));
+                                else pText += node.innerText;
+                            }
+                        });
+                        row.text = pText.trim(); 
+                        row.images = [...new Set([...row.images, ...localImgs])];
+                    }
+                }
+                
+                await DB.set('storyboardData', storyboardData);
+                await DB.set('globalRatio', document.getElementById('g_ratio').value);
+                
+                location.href = 'module3.html';
+            } catch (e) {
+                alert("保存异常：" + e.message);
+                console.error(e);
+                btn.innerText = origText;
+                btn.disabled = false;
+            }
+        } // 🌟 之前就是不小心删掉了这个关键的闭合大括号！
+
+function logout() {
+    localStorage.clear();
+    location.href = '../login.html'; // 🌟 注意这里多了 ../
+}
+
+        // ==========================================
+        // 🌟 新增：生图独立工作台弹窗控制逻辑
+        // ==========================================
+        function openImageGenModal(rowId) {
+            syncRichTextState(); // 先保存一下当前输入的文本
+            // 给 iframe 赋予地址，并把分镜 ID 传过去
+            document.getElementById('imageGenFrame').src = `image_gen_window.html?rowId=${rowId}`;
+            // 显示弹窗
+            document.getElementById('imageGenModalBg').style.display = 'flex';
+        }
+
+        window.closeImageGenModal = function() {
+            document.getElementById('imageGenModalBg').style.display = 'none';
+            document.getElementById('imageGenFrame').src = ''; // 清空以释放内存
+        }
+
+        // 供子页面(iframe)调用：将生成的图片自动存入对应的分镜格子
+        window.addGeneratedImageToRow = function(rowId, b64) {
+            const row = storyboardData.find(x => x.id == rowId);
+            if (row && !row.images.includes(b64)) {
+                row.images.push(b64);
+                renderStoryboardUI();
+                log(`✅ 独立生图成功，已自动加入分镜块 ${rowId}！`);
+            }
+            closeImageGenModal();
+        };
+
+    </script>
+</body>
+</html>

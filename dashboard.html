@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 导演 - 项目工作台</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { background: #f4f5f9; margin: 0; padding-bottom: 60px; font-family: system-ui, -apple-system, sans-serif; }
+        
+        .header { position: sticky; top: 0; z-index: 1000; background: #ffffff; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e6eb; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .breadcrumb { display: flex; align-items: center; font-size: 20px; font-weight: bold; color: #1d2129; gap: 10px; }
+        .breadcrumb-link { cursor: pointer; color: #86909c; transition: 0.2s; }
+        .breadcrumb-link:hover { color: var(--primary); }
+        .breadcrumb-separator { color: #c9cdd4; font-size: 16px; font-weight: normal; }
+        
+        .main-container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
+        
+        .grid-container { display: flex !important; flex-wrap: wrap !important; gap: 30px !important; justify-content: flex-start !important; align-items: flex-start !important; }
+        
+        .card { width: 220px !important; height: 220px !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; background: #fff; border: 1px solid #e5e6eb; border-radius: 14px; cursor: pointer; position: relative; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+        .card:hover { transform: translateY(-6px); box-shadow: 0 12px 24px rgba(0,0,0,0.08); border-color: var(--primary); }
+        
+        .card-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; opacity: 0; transition: 0.2s; }
+        .card:hover .card-actions { opacity: 1; }
+        .action-icon { width: 28px; height: 28px; border-radius: 50%; background: #f4f5f9; display: flex; justify-content: center; align-items: center; font-size: 13px; color: #86909c; transition: 0.2s; }
+        .action-icon:hover { background: #e8f3ff; color: var(--primary); }
+        .action-icon.delete:hover { background: #ffece8; color: #f53f3f; }
+
+        .card-icon { font-size: 60px; margin-bottom: 18px; line-height: 1; transition: transform 0.2s; }
+        .card:hover .card-icon { transform: scale(1.08); }
+        
+        .card-title { font-size: 16px; font-weight: 600; color: #1d2129; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; text-align: center;}
+        .card-meta { font-size: 12px; color: #86909c; }
+        
+        .card-add { border: 2px dashed #dcdfe6; background: transparent; box-shadow: none; }
+        .card-add:hover { border-color: var(--primary); background: #f8fbff; }
+        .card-add .card-icon { color: var(--primary); font-size: 45px; }
+        .card-add .card-title { color: var(--primary); margin: 0; }
+
+        .pagination { display: flex; justify-content: center; align-items: center; margin-top: 50px; gap: 15px; width: 100%; }
+        .page-btn { padding: 8px 16px; border: 1px solid #dcdfe6; border-radius: 6px; background: #fff; cursor: pointer; color: #4e5969; font-size: 14px; transition: 0.2s; }
+        .page-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+        .page-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #f4f5f9; }
+        .page-info { font-size: 14px; color: #86909c; font-weight: bold; }
+
+        /* 🌟 新增：用户状态栏样式 */
+        .user-panel { display: flex; align-items: center; gap: 20px; }
+        .credit-badge { background: #fff5f5; color: #ff6b6b; padding: 6px 14px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 14px; }
+        .logout-btn { color: #86909c; text-decoration: none; font-size: 14px; cursor: pointer; transition: 0.2s; }
+        .logout-btn:hover { color: #f53f3f; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <div class="header">
+        <div class="breadcrumb" id="breadcrumbHeader"></div>
+        
+        <div class="user-panel">
+            <button id="topAddBtn" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold; cursor: pointer;" onclick="handleTopAddClick()">+ 新建</button>
+            
+            <div style="width: 1px; height: 20px; background: #e5e6eb; margin: 0 5px;"></div> <span class="credit-badge" id="headerCredit">💎 积分: 查询中...</span>
+            <a class="logout-btn" onclick="logout()">退出</a>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="grid-container" id="gridContainer"></div>
+        
+        <div class="pagination" id="paginationCtrl" style="display: none;">
+            <button class="page-btn" id="btnPrevPage" onclick="changePage(-1)">上一页</button>
+            <span class="page-info" id="pageInfoText">1 / 1</span>
+            <button class="page-btn" id="btnNextPage" onclick="changePage(1)">下一页</button>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // 🌟 初始化 Supabase
+        const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const WORKSPACE_KEYS = ['scriptText', 'scriptSummary', 'storyboardData', 'extractedData', 'globalRatio', 'llmModelSelect', 'llm_config', 'charactersData'];
+
+        let projects = [];
+        let currentView = 'projects'; 
+        let activeProjectId = null;
+        let currentPage = 1;
+        const ITEMS_PER_PAGE = 11;
+
+         window.onload = async () => {
+            // 🌟 1. 登录验证（门禁系统）：如果没有 userId，直接踢回登录页！
+            const userId = localStorage.getItem('userId');
+            if (!userId) {
+                alert("未登录或登录已过期，请先登录！");
+                location.href = 'test-login.html';
+                return;
+            }
+
+            // 🌟 2. 去云端获取最新积分并显示
+            fetchCredits(userId);
+
+            // ----- 下面是你原本的逻辑 -----
+            const activeContext = await DB.get('active_context');
+            await packCurrentWorkspace();
+            projects = await DB.get('all_projects') || [];
+            
+            // 🌟 把它注释掉或删掉，不要让它自动跳入分集
+            // if (activeContext && activeContext.projectId) {
+            //     activeProjectId = activeContext.projectId;
+            //     currentView = 'episodes';
+            //     currentPage = 1;
+            // }
+
+            // 🌟 每次进来，强制设置为显示“项目大厅”
+            currentView = 'projects';
+            activeProjectId = null;
+            
+            renderView();
+        };
+
+        // 🌟 新增：从云端拉取积分
+        async function fetchCredits(userId) {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('profiles')
+                    .select('credits')
+                    .eq('user_id', userId)
+                    .single();
+                
+                if (data) {
+                    document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
+                    localStorage.setItem('userCredits', data.credits); 
+                }
+            } catch (err) {
+                console.error("获取积分失败", err);
+                document.getElementById('headerCredit').innerText = "💎 积分: 获取失败";
+            }
+        }
+
+        // 🌟 新增：退出登录
+function logout() {
+    localStorage.clear(); // 清空所有本地凭证
+    // 🌟 关键修改：使用 replace 替换掉当前历史记录
+    window.location.replace('index.html'); 
+}
+        // ================= 以下全是原有的项目渲染逻辑 =================
+        function renderView() {
+            updateBreadcrumb();
+            const container = document.getElementById('gridContainer');
+            const topAddBtn = document.getElementById('topAddBtn');
+            let displayList = [];
+
+            if (currentView === 'projects') {
+                topAddBtn.innerText = "+ 新建剧本项目";
+                displayList = [...projects, { _isAdd: true, _type: 'project' }];
+            } else {
+                const proj = projects.find(p => p.id === activeProjectId);
+                if (!proj) return backToProjects();
+                topAddBtn.innerText = "+ 新建分集";
+                displayList = [...proj.episodes, { _isAdd: true, _type: 'episode' }];
+            }
+
+            const totalPages = Math.max(1, Math.ceil(displayList.length / ITEMS_PER_PAGE));
+            if (currentPage > totalPages) currentPage = totalPages;
+            const pagedItems = displayList.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+            container.innerHTML = pagedItems.map((item, idx) => {
+                const globalIdx = (currentPage - 1) * ITEMS_PER_PAGE + idx + 1;
+
+                if (item._isAdd) {
+                    if (item._type === 'project') {
+                        return `<div class="card card-add" onclick="createProject()"><div class="card-icon">➕</div><div class="card-title">新建项目</div></div>`;
+                    } else {
+                        return `<div class="card card-add" onclick="createEpisode()"><div class="card-icon">➕</div><div class="card-title">新建分集</div></div>`;
+                    }
+                }
+
+                if (currentView === 'projects') {
+                    return `
+                    <div class="card" onclick="openProject('${item.id}')">
+                        <div class="card-actions">
+                            <div class="action-icon" title="重命名" onclick="event.stopPropagation(); renameProject('${item.id}')">✏️</div>
+                            <div class="action-icon delete" title="删除" onclick="event.stopPropagation(); deleteProject('${item.id}')">🗑️</div>
+                        </div>
+                        <div class="card-icon">📁</div>
+                        <div class="card-title" title="${item.name}">${item.name}</div>
+                        <div class="card-meta">共 ${item.episodes.length} 集分镜</div>
+                    </div>`;
+                } else {
+                    return `
+                    <div class="card" onclick="enterEpisode('${item.id}')">
+                        <div class="card-actions">
+                            <div class="action-icon" title="重命名" onclick="event.stopPropagation(); renameEpisode('${item.id}')">✏️</div>
+                            <div class="action-icon delete" title="删除" onclick="event.stopPropagation(); deleteEpisode('${item.id}')">🗑️</div>
+                        </div>
+                        <div class="card-icon">🎬</div>
+                        <div class="card-title" title="${item.name}">${item.name}</div>
+                        <div class="card-meta">第 ${globalIdx} 集 · 点击创作</div>
+                    </div>`;
+                }
+            }).join('');
+
+            updatePagination(displayList.length);
+        }
+
+        function updateBreadcrumb() {
+            const bc = document.getElementById('breadcrumbHeader');
+            if (currentView === 'projects') {
+                bc.innerHTML = `🏠 工作台`;
+            } else {
+                const proj = projects.find(p => p.id === activeProjectId);
+                bc.innerHTML = `
+                    <span class="breadcrumb-link" onclick="backToProjects()">🏠 工作台</span>
+                    <span class="breadcrumb-separator">/</span>
+                    <span>${proj ? proj.name : '项目'}</span>
+                `;
+            }
+        }
+
+        function updatePagination(totalItems) {
+            const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
+            const ctrl = document.getElementById('paginationCtrl');
+            if (totalPages <= 1) {
+                ctrl.style.display = 'none';
+            } else {
+                ctrl.style.display = 'flex';
+                document.getElementById('pageInfoText').innerText = `${currentPage} / ${totalPages}`;
+                document.getElementById('btnPrevPage').disabled = (currentPage === 1);
+                document.getElementById('btnNextPage').disabled = (currentPage === totalPages);
+            }
+        }
+
+        function changePage(delta) { currentPage += delta; renderView(); }
+        function handleTopAddClick() { if (currentView === 'projects') createProject(); else createEpisode(); }
+        function openProject(id) { activeProjectId = id; currentView = 'episodes'; currentPage = 1; renderView(); }
+        function backToProjects() { activeProjectId = null; currentView = 'projects'; currentPage = 1; renderView(); }
+        async function saveDB() { await DB.set('all_projects', projects); renderView(); }
+
+        async function packCurrentWorkspace() {
+            const activeContext = await DB.get('active_context');
+            if (activeContext) {
+                let allProjs = await DB.get('all_projects') || [];
+                const pIdx = allProjs.findIndex(p => p.id === activeContext.projectId);
+                if (pIdx !== -1) {
+                    const eIdx = allProjs[pIdx].episodes.findIndex(e => e.id === activeContext.epId);
+                    if (eIdx !== -1) {
+                        let snapshot = {};
+                        for (let key of WORKSPACE_KEYS) snapshot[key] = await DB.get(key);
+                        allProjs[pIdx].episodes[eIdx].data = snapshot;
+                        await DB.set('all_projects', allProjs);
+                    }
+                }
+                for (let key of WORKSPACE_KEYS) await DB.set(key, null);
+                await DB.set('active_context', null);
+            }
+        }
+
+        async function enterEpisode(epId) {
+            const proj = projects.find(p => p.id === activeProjectId);
+            const ep = proj.episodes.find(e => e.id === epId);
+            if (!ep) return;
+
+            if (ep.data) {
+                for (let key of Object.keys(ep.data)) await DB.set(key, ep.data[key]);
+            }
+            await DB.set('active_context', { projectId: proj.id, epId: ep.id });
+            window.location.href = 'module1.html';
+        }
+
+        function createProject() {
+            const name = prompt("请输入新项目（剧本）的名称：", "未命名剧本");
+            if (name && name.trim()) {
+                projects.push({ id: 'proj_' + Date.now(), name: name.trim(), episodes: [] });
+                currentPage = Math.ceil((projects.length + 1) / ITEMS_PER_PAGE);
+                saveDB();
+            }
+        }
+
+        function createEpisode() {
+            const proj = projects.find(p => p.id === activeProjectId);
+            if (proj) {
+                const name = prompt("请输入新分集的名称：", `第 ${proj.episodes.length + 1} 集`);
+                if (name && name.trim()) {
+                    proj.episodes.push({ id: 'ep_' + Date.now(), name: name.trim(), data: {} });
+                    currentPage = Math.ceil((proj.episodes.length + 1) / ITEMS_PER_PAGE);
+                    saveDB();
+                }
+            }
+        }
+
+        function renameProject(id) {
+            const proj = projects.find(p => p.id === id);
+            if (proj) {
+                const newName = prompt("重命名项目：", proj.name);
+                if (newName && newName.trim()) { proj.name = newName.trim(); saveDB(); }
+            }
+        }
+
+        function deleteProject(id) {
+            if (confirm("🚨 警告：这将会永久删除该项目及其下属的所有分集、资产和生成的视频！\n\n确定要彻底删除吗？")) {
+                projects = projects.filter(p => p.id !== id);
+                currentPage = Math.max(1, Math.ceil((projects.length + 1) / ITEMS_PER_PAGE));
+                saveDB();
+            }
+        }
+
+        function renameEpisode(epId) {
+            const proj = projects.find(p => p.id === activeProjectId);
+            const ep = proj.episodes.find(e => e.id === epId);
+            if (ep) {
+                const newName = prompt("重命名分集：", ep.name);
+                if (newName && newName.trim()) { ep.name = newName.trim(); saveDB(); }
+            }
+        }
+
+        function deleteEpisode(epId) {
+            if (confirm("确定要删除这个分集及其包含的所有分镜和视频吗？")) {
+                const proj = projects.find(p => p.id === activeProjectId);
+                if (proj) {
+                    proj.episodes = proj.episodes.filter(e => e.id !== epId);
+                    currentPage = Math.max(1, Math.ceil((proj.episodes.length + 1) / ITEMS_PER_PAGE));
+                    saveDB();
+                }
+            }
+        }
+    </script>
+</body>
+</html>

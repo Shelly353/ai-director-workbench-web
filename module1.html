@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 导演工作站 - 步骤1：视觉设定</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+/* 用户状态栏样式 */
+.user-panel { display: flex; align-items: center; gap: 15px;  }
+.header { 
+    padding: 15px 25px; 
+    min-height: 70px; 
+    box-sizing: border-box;
+}
+.credit-badge { 
+    background: #fff5f5; 
+    color: #ff6b6b; 
+    padding: 6px 14px; /* 稍微增加内边距更美观 */
+    border-radius: 20px; 
+    font-weight: bold; 
+    border: 1px solid #ffd8d8; 
+    font-size: 13px; 
+    white-space: nowrap; 
+}
+.logout-btn { color: #86909c; text-decoration: none; font-size: 13px; cursor: pointer; transition: 0.2s; }
+.logout-btn:hover { color: #f53f3f; }
+
+        body { padding-bottom: 30px; } 
+        .config-bar { background: #fff; padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 15px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.05); flex-wrap: wrap; }
+        .config-bar label { font-weight: bold; font-size: 13px; color: var(--text); }
+        .config-bar select { padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 13px; outline: none; cursor: pointer; }
+        
+        .prompt-dialog { display: none; background: #f8f9fa; padding: 12px; border-radius: 8px; margin-top: 10px; border: 1px solid var(--border); }
+        .rich-input { width: 100%; min-height: 60px; max-height: 120px; overflow-y: auto; padding: 10px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 8px; outline: none; font-size: 14px; line-height: 1.5; background: #fff; margin-bottom: 10px; text-align: left; }
+        .rich-input:empty:before { content: attr(data-placeholder); color: #86909c; pointer-events: none; }
+        
+        .inline-pill { display: inline-flex; align-items: center; background: #e8f3ff; border: 1px solid #bcdcff; border-radius: 4px; padding: 2px 6px; margin: 0 4px; vertical-align: middle; cursor: default; }
+        .inline-pill img { width: 18px; height: 18px; object-fit: cover; border-radius: 2px; margin-right: 4px; }
+
+        .img-preview-box { width: 100%; aspect-ratio: 16/9; background: #f2f3f5; border: 2px dashed #c9cdd4; border-radius: 6px; display: flex; justify-content: center; align-items: center; cursor: pointer; overflow: hidden; margin-bottom: 10px; position: relative; transition: 0.2s; }
+        .img-preview-box:hover { border-color: var(--primary); background: #e8f3ff; }
+        .img-preview-box img { width: 100%; height: 100%; object-fit: cover; }
+        .img-preview-box span { color: var(--gray); font-size: 12px; font-weight: bold; }
+
+        .multi-img-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; margin-bottom: 8px; }
+        .thumb-container { position: relative; aspect-ratio: 1; border-radius: 4px; overflow: hidden; border: 1px solid #ddd; background: #fff; }
+        .thumb-img { width: 100%; height: 100%; object-fit: cover; }
+        .thumb-del { position: absolute; top: 0; right: 0; background: rgba(245, 63, 63, 0.85); color: #fff; font-size: 10px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; }
+
+        #hoverPreview { display: none; position: fixed; z-index: 9999; background: #fff; padding: 5px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); pointer-events: none; border: 1px solid #eee; }
+        #hoverPreview img { max-width: 300px; max-height: 300px; border-radius: 4px; display: block; }
+
+        #mentionMenu { display: none; position: fixed; background: #fff; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.15); border-radius: 8px; padding: 10px; z-index: 2000; width: 220px; }
+        #mentionMenuGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+
+        .btn-add-bottom { width: 100%; margin-top: 5px; border: 1px dashed var(--gray); color: var(--gray); background: transparent; padding: 10px; cursor: pointer; border-radius: 6px;}
+        .btn-add-bottom:hover { border-color: var(--primary); color: var(--primary); background: #f0f7ff; }
+        
+        .asset-name-input { font-weight: bold; font-size: 14px; border: none; border-bottom: 1px dashed #ccc; background: transparent; flex: 1; min-width: 0; margin-right: 10px; outline: none; }
+
+        #imageModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; }
+        #imageModal img { max-width: 90%; max-height: 80%; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        .modal-controls { margin-top: 20px; display: flex; gap: 15px; }
+        .btn-modal { padding: 10px 24px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; }
+        .btn-modal:hover { transform: scale(1.05); }
+        .btn-modal-close { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; cursor: pointer; user-select: none; }
+        .btn-modal-close:hover { color: #f53f3f; }
+
+        .console-wrapper { position: fixed; bottom: 0; left: 0; width: 100%; background: #1e1e1e; z-index: 9000; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform: translateY(calc(100% - 30px)); border-top: 1px solid #444; }
+        .console-wrapper.open { transform: translateY(0); }
+        .console-header { height: 30px; background: #2d2d2d; color: #ccc; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-size: 12px; cursor: pointer; user-select: none; }
+        .console-header:hover { background: #3d3d3d; color: #fff; }
+        .console-content { height: 180px; padding: 10px 20px; color: #4af626; font-family: monospace; font-size: 12px; overflow-y: auto; box-sizing: border-box; white-space: pre-wrap;}
+
+        .btn:disabled { background-color: #e5e6eb; color: #86909c; cursor: not-allowed; border-color: #e5e6eb; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div style="display:flex; align-items:center;">
+        <button class="btn btn-outline" onclick="saveAndBack()" style="margin-right: 20px; padding: 8px 15px; border-color: #e5e6eb;">🏠 返回项目</button>
+        <div class="steps">
+            <div class="step active">1. 剧本设定分析</div>
+            <div class="step">2. 分镜匹配</div>
+            <div class="step">3. 视频生成</div>
+        </div>
+    </div>
+
+    <div style="display:flex; align-items:center; gap: 20px;">
+        <div class="user-panel" style="margin:0;">
+<span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
+            <a class="logout-btn" onclick="logout()">退出</a>
+        </div>
+        <button class="btn btn-primary" onclick="goToNextStep()">下一步 (分镜拆分) ➔</button>
+    </div>
+</div>
+
+    <div class="config-bar">
+        <label>🧠 大语言模型:</label>
+        <select id="llmModelSelect">
+            <option value="gemini-3-flash-preview">Gemini 3.1 Flash</option>
+            <option value="deepseek-chat">DeepSeek</option>
+        </select>
+
+        <label style="margin-left: 10px;">🎨 生图模型:</label>
+        <select id="imageModelSelect">
+            <option value="wan2.7-image">Wan2.7 Image</option>
+            <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash</option>
+            <option value="doubao-seedream-5.0-lite">Doubao Seedream 5.0 Lite</option>
+        </select>
+
+        <label style="margin-left: 10px;">🎬 风格:</label>
+        <select id="styleSelect" onchange="validateExtractBtn()">
+            <option value="">请选择风格...</option>
+            <option value="realistic">真人实拍</option>
+            <option value="anime">日本动漫</option>
+            <option value="comic">美式漫画</option>
+            <option value="cyberpunk">赛博朋克</option>
+            <option value="ink">水墨国风</option>
+        </select>
+
+        <label style="margin-left: 10px;">📐 比例:</label>
+        <select id="ratioSelect" onchange="validateExtractBtn()">
+            <option value="">请选择比例...</option>
+            <option value="16:9">16:9 (横屏)</option>
+            <option value="9:16">9:16 (竖屏)</option>
+            <option value="21:9">21:9 (宽荧幕)</option>
+            <option value="1:1">1:1 (方形)</option>
+            <option value="4:3">4:3 (复古)</option>
+        </select>
+
+        <div style="margin-left: auto; color: var(--gray); font-size: 11px;">提示：在卡片描述框输入 @ 可引用参考图</div>
+    </div>
+
+    <div class="main-container">
+        <h3>粘贴原始剧本</h3>
+        <textarea id="scriptInput" placeholder="在此粘贴您的剧本文字..."></textarea>
+        <button id="extractBtn" class="btn btn-primary" style="width: 200px;" onclick="analyzeScript()" disabled>🤖 提取视觉四要素</button>
+
+        <div class="four-columns">
+            <div class="col-box" id="col-characters"><div class="col-title"><span>人物 <span class="count-badge" id="count-characters">0</span></span></div><div class="list"></div><button class="btn-add-bottom" onclick="addAsset('characters')">+ 新增人物</button></div>
+            <div class="col-box" id="col-scenes"><div class="col-title"><span>场景 <span class="count-badge" id="count-scenes">0</span></span></div><div class="list"></div><button class="btn-add-bottom" onclick="addAsset('scenes')">+ 新增场景</button></div>
+            <div class="col-box" id="col-props"><div class="col-title"><span>道具 <span class="count-badge" id="count-props">0</span></span></div><div class="list"></div><button class="btn-add-bottom" onclick="addAsset('props')">+ 新增道具</button></div>
+            <div class="col-box" id="col-effects"><div class="col-title"><span>特效 <span class="count-badge" id="count-effects">0</span></span></div><div class="list"></div><button class="btn-add-bottom" onclick="addAsset('effects')">+ 新增特效</button></div>
+        </div>
+    </div>
+
+    <div id="hoverPreview"><img id="hoverImg" src=""></div>
+    <div id="mentionMenu"><div id="mentionMenuGrid"></div></div>
+    <input type="file" id="multiUploader" multiple accept="image/*" style="display:none;">
+
+    <div id="imageModal">
+        <div class="btn-modal-close" onclick="closeImageModal()">×</div>
+        <img id="modalImg" src="">
+        <div class="modal-controls">
+            <button class="btn-modal" style="background:#fff; color:#1d2129;" onclick="downloadModalImage()">📥 下载图片</button>
+            <button class="btn-modal" style="background:#f53f3f; color:#fff;" onclick="deleteModalImage()">🗑️ 删除图片</button>
+        </div>
+    </div>
+
+    <div class="console-wrapper" id="consoleWrapper">
+        <div class="console-header" onclick="toggleConsole()">
+            <span>📝 终端运行日志</span>
+            <span id="consoleToggleIcon">▲ 点击展开</span>
+        </div>
+        <div class="console-content" id="logConsole"></div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/prompts/01_extract.js"></script>
+    <script src="js/prompts/characters.js"></script>
+    <script src="js/prompts/scenes.js"></script>
+    <script src="js/prompts/props.js"></script>
+    <script src="js/prompts/effects.js"></script>
+
+    <script>
+// ==========================================
+// 🌟 核心：Supabase 数据库连接与通用扣费系统
+// ==========================================
+const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// 🌟 新增：从云端数据库获取并显示实际积分
+async function fetchCredits() {
+    const userId = localStorage.getItem('userId');
+    if (!userId) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from('profiles')
+            .select('credits')
+            .eq('user_id', userId)
+            .single();
+        if (data) {
+            // 将云端积分渲染到页面右上角
+            document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
+            localStorage.setItem('userCredits', data.credits);
+        }
+    } catch (e) {
+        console.error("获取积分失败:", e);
+    }
+}
+
+async function checkAndDeductCredits(cost, taskName) {
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+        alert("登录已过期，请重新登录！");
+        return false;
+    }
+    try {
+        // 1. 实时查账
+        const { data, error } = await supabaseClient.from('profiles').select('credits').eq('user_id', userId).single();
+        if (error || !data) throw new Error("查账失败");
+        
+        // 2. 判断余额
+        if (data.credits < cost) {
+            alert(`❌ 积分不足！\n\n执行【${taskName}】需要 ${cost} 💎\n您当前剩余: ${data.credits} 💎\n请充值后重试。`);
+            return false; // 余额不足，拒绝放行
+        }
+        
+        // 3. 执行云端扣费
+        const newCredits = data.credits - cost;
+        const { error: updateError } = await supabaseClient.from('profiles').update({ credits: newCredits }).eq('user_id', userId);
+        if (updateError) throw updateError;
+        
+        // 4. 扣费成功，更新本地口袋并打印日志
+        localStorage.setItem('userCredits', newCredits);
+        if(typeof log === 'function') log(`💎 扣费成功：[${taskName}] 消耗 ${cost} 积分，剩余 ${newCredits} 💎。`);
+        return true; // 放行！
+    } catch (err) {
+        console.error("扣费异常:", err);
+        alert("计费系统网络异常，请稍后重试。");
+        return false;
+    }
+}
+// ==========================================
+
+        const STYLE_MODIFIERS = {
+            "realistic": {
+                name: "真人实拍（极致真实，禁止任何动漫元素）",
+                characters: "Award-winning photography, photorealistic portrait, highly detailed skin texture, 2k resolution, cinematic lighting, shot on 35mm lens, realistic human skin. ratio: 16:9,",
+                scenes: "Live-action movie scene, hyper-realistic, photorealistic physical environment, natural lighting, highly detailed real-world textures. ",
+                props: "Product photography, hyper-detailed photorealistic material, physically based rendering. ",
+                effects: "Hollywood cinematic visual effects, high-fidelity physical simulation. "
+            },
+            "anime": {
+                name: "日本动漫",
+                characters: "Anime style, 2D flat shading, cel shaded, anime character design. ratio: 16:9",
+                scenes: "Anime background art, Makoto Shinkai style, beautiful 2D animation scenery. ",
+                props: "Anime style prop, 2D cel shaded. ",
+                effects: "Stylized anime VFX, dynamic 2D impact effects. "
+
+            },
+            "comic": {
+                name: "美式漫画",
+                characters: "Marvel/DC comic book style, bold outlines, halftone shading.ratio: 16:9 ",
+                scenes: "Comic book background, dramatic graphic novel environment. ",
+                props: "Comic book illustrated prop, pop art style. ",
+                effects: "Comic halftone energy effects, graphic novel explosions. "
+            },
+            "cyberpunk": {
+                name: "赛博朋克",
+                characters: "Cyberpunk aesthetic, neon rim lighting, high-tech cybernetics.ratio: 16:9 ",
+                scenes: "Dystopian futuristic city, neon-lit streets, rain-slicked pavement. ",
+                props: "Sci-fi high-tech prop, glowing neon components. ",
+                effects: "Holographic glitches, neon plasma VFX. "
+            },
+            "ink": {
+                name: "水墨国风",
+                characters: "Traditional Chinese ink wash painting style, ethereal mood.ratio: 16:9 ",
+                scenes: "Chinese landscape painting, shan shui style, misty mountains. ",
+                props: "Traditional artifact, painted in ink wash style. ",
+                effects: "Ink splash VFX, fluid dynamic ink particles. "
+            }
+        };
+
+        let extractedData = { characters: [], scenes: [], props: [], effects: [] };
+        let globalImagesPool = [];
+        let savedRange = null; 
+        let currentUploadTarget = null; 
+        let currentPreviewTarget = { cat: null, idx: null, type: null, b64: null, name: null }; 
+// 🌟 新增：临时暗号拦截器（完全不影响 UI）
+        function getAccessCode() {
+            let code = localStorage.getItem('temp_access_code');
+            if (!code) {
+                // 如果没缓存，就弹出浏览器自带的输入框
+                code = prompt("🚧 系统需要临时的 API 访问暗号：");
+                if (code) localStorage.setItem('temp_access_code', code);
+            }
+            return code || "";
+        }
+
+        window.onload = async () => {
+    // 🌟 核心安全：检查登录凭证
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+        // 如果没有找到身份信息，不给任何提示，直接强行踢回登录页
+        // 使用 replace 而不是 href，是为了不让用户再通过“返回”跳回来
+        window.location.replace('index.html'); 
+        return;
+    }
+
+await fetchCredits();
+            try {
+                if (typeof DB !== 'undefined' && DB.init) await DB.init();
+
+                const savedScript = await DB.get('scriptText');
+                if (savedScript) document.getElementById('scriptInput').value = savedScript;
+                
+                const savedLlm = await DB.get('llmModelSelect');
+                if (savedLlm) document.getElementById('llmModelSelect').value = savedLlm;
+
+                const savedModel = await DB.get('imageModelSelect');
+                if (savedModel) document.getElementById('imageModelSelect').value = savedModel;
+
+                const savedStyle = await DB.get('styleSelect');
+                if (savedStyle) document.getElementById('styleSelect').value = savedStyle;
+                
+                const savedRatio = await DB.get('ratioSelect');
+                if (savedRatio) document.getElementById('ratioSelect').value = savedRatio;
+
+                validateExtractBtn(); 
+
+                const savedData = await DB.get('extractedData');
+                if (savedData) {
+                    extractedData = savedData;
+                    globalImagesPool = await DB.get('globalImagesPool') || [];
+                    renderAssetsUI();
+                    log(`🎉 成功从本地数据库加载无损资源！`);
+                }
+            } catch (e) {
+                console.warn("读取本地缓存失败", e);
+            }
+        };
+async function fetchCredits() {
+    const userId = localStorage.getItem('userId');
+    const { data } = await supabaseClient.from('profiles').select('credits').eq('user_id', userId).single();
+    if (data) {
+        document.getElementById('headerCredit').innerText = `💎 ${data.credits}`;
+    }
+}
+
+function logout() {
+    localStorage.clear();
+    location.href = 'login.html';
+}
+
+// 🚨 记得更新你之前的 checkAndDeductCredits 函数，扣费成功后刷新显示：
+// 在 checkAndDeductCredits 成功的最后加一句：
+// document.getElementById('headerCredit').innerText = `💎 ${newCredits}`;
+        async function validateExtractBtn() {
+            const style = document.getElementById('styleSelect').value;
+            const ratio = document.getElementById('ratioSelect').value;
+            const btn = document.getElementById('extractBtn');
+            btn.disabled = !(style && ratio);
+            try { 
+                await DB.set('styleSelect', style); 
+                await DB.set('ratioSelect', ratio); 
+            } catch(e){}
+        }
+
+        function toggleConsole() {
+            const wrapper = document.getElementById('consoleWrapper');
+            const icon = document.getElementById('consoleToggleIcon');
+            wrapper.classList.toggle('open');
+            icon.innerText = wrapper.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开';
+        }
+
+        function log(msg) {
+            const consoleEl = document.getElementById('logConsole');
+            if (consoleEl) {
+                const time = new Date().toLocaleTimeString();
+                consoleEl.innerText += `[${time}] ${msg}\n`;
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
+        }
+
+        document.getElementById('llmModelSelect').onchange = async function() {
+            try { await DB.set('llmModelSelect', this.value); } catch(e){}
+            log(`🧠 语言模型切换为: ${this.options[this.selectedIndex].text}`);
+        };
+
+        // 🌟 新增：保证生图模型的选择成为全局配置
+        document.getElementById('imageModelSelect').onchange = async function() {
+            try { 
+                await DB.set('imageModelSelect', this.value); 
+                await DB.set('image_config', { model: this.value }); 
+            } catch(e){}
+            log(`🎨 生图模型切换为: ${this.options[this.selectedIndex].text}`);
+        };
+
+        async function saveCurrentState() {
+            try {
+                await DB.set('extractedData', extractedData);
+                await DB.set('globalImagesPool', globalImagesPool);
+            } catch (e) {
+                console.error("保存状态失败", e);
+            }
+        }
+
+        async function analyzeScript() {
+            const btn = document.getElementById('extractBtn');
+            const text = document.getElementById('scriptInput').value.trim();
+            if (!text) return alert("请先输入剧本！");
+
+            btn.disabled = true;
+            const originalText = btn.innerText;
+            btn.innerText = "⏳ 正在分析剧本并提取要素...";
+            
+            const styleKey = document.getElementById('styleSelect').value;
+            const styleName = (styleKey && STYLE_MODIFIERS[styleKey]) ? STYLE_MODIFIERS[styleKey].name : "默认风格";
+            const selectedModel = document.getElementById('llmModelSelect').value || "deepseek-chat";
+
+           // 👇 插入这三行扣费代码 👇
+            const cost = selectedModel.includes('gemini') ? 2 : 1;
+            if (!(await checkAndDeductCredits(cost, "提取视觉四要素"))) return;
+            // 👆 插入结束 👆
+
+            log(`🚀 正在调用 [${selectedModel}] 发起剧本分析...`);
+
+            try { await DB.set('scriptText', text); } catch(e){}
+            
+            const sysPrompt = (window.AI_PROMPTS && window.AI_PROMPTS.extractSystemPrompt) ? window.AI_PROMPTS.extractSystemPrompt : "你是一位资深的影视视觉拆解专家。请仔细阅读用户提供的剧本，从中精准提取所有的视觉要素。";
+            
+            try {
+                if (typeof apiRequest === 'undefined') {
+                    throw new Error("apiRequest 未定义，请检查js/app.js 是否正确加载。");
+                }
+ 
+                let endpoint = '/api/deepseek/chat';
+                if (selectedModel.startsWith('gemini')) {
+                    endpoint = '/api/gemini/chat';
+                }
+
+                const apiModelName = selectedModel;
+                await DB.set('llm_config', { model: apiModelName, endpoint: endpoint });
+
+                const strictFormat = `
+必须且只能返回包含以下四个英文 Key 的 JSON 对象（每个 Key 对应一个对象数组，如果没有该项内容则返回空数组 []）：
+{
+  "characters": [{"name": "提取的人物名称", "description": "详细的外貌、服装及特征描述"}],
+  "scenes": [{"name": "提取的场景名称", "description": "具体的环境、光影及陈设描述"}],
+  "props": [{"name": "提取的道具名称", "description": "材质、颜色及状态描述"}],
+  "effects": [{"name": "提取的特效名称", "description": "光效、粒子等视觉表现描述"}]
+}`;
+
+                const res = await apiRequest(endpoint, { 
+                    model: apiModelName, 
+                    stream: false, 
+                    response_format: { "type": "json_object" },
+                    messages: [
+                        { role: "system", content: sysPrompt + "\n当前风格要求：" + styleName + "\n" + strictFormat },
+                        { role: "user", content: "剧本内容如下：\n" + text }
+                    ] 
+                });
+                
+                let jsonStr = "";
+                if (res.choices && res.choices[0].message) {
+                    jsonStr = res.choices[0].message.content; 
+                } else if (res.candidates && res.candidates[0].content) {
+                    jsonStr = res.candidates[0].content.parts[0].text; 
+                } else {
+                    throw new Error("无法解析模型返回的数据结构");
+                }
+
+                jsonStr = jsonStr.replace(/```json/gi, '').replace(/```/g, '').trim();
+                const firstBrace = jsonStr.indexOf('{');
+                const lastBrace = jsonStr.lastIndexOf('}');
+                if (firstBrace !== -1 && lastBrace !== -1) {
+                    jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+                }
+
+                let data = {};
+                try {
+                    data = JSON.parse(jsonStr);
+                } catch (parseErr) {
+                    console.error("JSON 解析失败: ", jsonStr);
+                    throw new Error("大模型返回的内容不是有效的 JSON 格式。");
+                }
+
+                const targetData = data.data || data.result || data;
+                const chars = targetData.characters || targetData['人物'] || targetData['角色'] || [];
+                const scenes = targetData.scenes || targetData['场景'] || targetData['场景列表'] || [];
+                const props = targetData.props || targetData['道具'] || [];
+                const effects = targetData.effects || targetData['特效'] || [];
+
+                if (chars.length === 0 && scenes.length === 0 && props.length === 0 && effects.length === 0) {
+                    console.warn("解析出的空数据体：", data);
+                    throw new Error("大模型未提取到任何元素，可能是未理解剧本内容。");
+                }
+
+                const normalize = (arr, category) => (Array.isArray(arr) ? arr : []).map((x, i) => ({
+                    name: x.name || x.title || x.character || x.prop || x.effect || `${category}_${i+1}`,
+                    description: x.description || x.desc || '',
+                    img: null,
+                    refImages: []
+                }));
+
+                extractedData.characters = normalize(chars, '人物');
+                extractedData.props = normalize(props, '道具');
+                extractedData.effects = normalize(effects, '特效');
+                extractedData.scenes = (Array.isArray(scenes) ? scenes : []).map((x, i) => ({
+                    name: x.name || x.scene || x.location || `场景_${i+1}`,
+                    description: x.description || x.desc || '',
+                    forwardDesc: x.description || x.desc || '', // 独立正视图文案
+                    reverseDesc: '', // 独立反打图文案
+                    forwardImg: null,
+                    reverseImg: null,
+                    refImages: []
+                }));
+                
+                log("✨ 视觉要素提取成功！");
+                renderAssetsUI();
+            } catch (e) { 
+                let errMsg = e.message;
+                if (errMsg.includes('limit: 0') || errMsg.includes('429') || errMsg.includes('404')) {
+                    log(`⚠️ 触发 Google 免费版区域限流或模型封锁，已自动降级为您切换至 DeepSeek。`);
+                    alert(`Google 接口触发了封锁（Limit: 0 / 429）或模型不存在。\n\n系统已为您自动切换至【DeepSeek】模型，请重新点击“提取视觉四要素”即可正常使用！`);
+                    
+                    document.getElementById('llmModelSelect').value = 'deepseek-chat';
+                    DB.set('llmModelSelect', 'deepseek-chat');
+                } else {
+                    log(`❌ 提取失败：${e.message}`);
+                    alert("提取失败：" + errMsg); 
+                }
+            } finally {
+                btn.disabled = false;
+                btn.innerText = originalText;
+                validateExtractBtn(); 
+            }
+        }
+
+        function renderAssetsUI() {
+            const openPanels = [];
+            document.querySelectorAll('.prompt-dialog').forEach(el => {
+                if (el.style.display === 'block') openPanels.push(el.id);
+            });
+
+            const renderList = (category, dataArr) => {
+                const listDiv = document.querySelector(`#col-${category} .list`);
+                const countBadge = document.getElementById(`count-${category}`);
+                if (countBadge) countBadge.innerText = dataArr.length;
+                listDiv.innerHTML = "";
+                dataArr.forEach((item, index) => {
+                    if (category === 'scenes') {
+                        listDiv.innerHTML += createAssetHTML(category, index, item.name, item.description, 'forward', '正视');
+                        listDiv.innerHTML += createAssetHTML(category, index, item.name, item.description, 'reverse', '反打');
+                    } else {
+                        listDiv.innerHTML += createAssetHTML(category, index, item.name, item.description, 'main', '');
+                    }
+                });
+            };
+            renderList('characters', extractedData.characters);
+            renderList('scenes', extractedData.scenes);
+            renderList('props', extractedData.props);
+            renderList('effects', extractedData.effects);
+            
+            openPanels.forEach(id => {
+                const panel = document.getElementById(id);
+                if (panel) panel.style.display = 'block';
+            });
+            saveCurrentState();
+        }
+
+       function createAssetHTML(category, index, name, desc, type, label) {
+            const divId = `asset_${category}_${index}_${type}`;
+            const item = extractedData[category][index];
+            
+            // 🌟 修复: 分别读取正视和反打的独立文案
+            let currentDesc = desc; 
+            if (category === 'scenes') {
+                currentDesc = type === 'forward' ? (item.forwardDesc || item.description || "") : (item.reverseDesc || "");
+            }
+
+            let currentImg = (category === 'scenes') ? (type === 'forward' ? item.forwardImg : item.reverseImg) : item.img;
+            
+            const imgClickAction = currentImg ? `openImageModal('${category}', ${index}, '${type}', '${currentImg}', '${name}')` : `uploadAssetResult('${category}', ${index}, '${type}')`;
+            const imgContent = currentImg ? `<img src="${currentImg}">` : `<span>+ 上传本地图片</span>`;
+            const safeName = (name || '').replace(/"/g, '&quot;');
+            const isSceneReverse = (category === 'scenes' && type === 'reverse');
+            
+            // 🌟 修复: 给反打视图同样配备独立的"重绘"和"立即生图"按钮
+            let redrawBtnHTML = currentImg ? `<button class="btn btn-outline" style="flex:1; font-size:12px;" onclick="genAssetImage('${category}', ${index}, '${type}')">🔄 重绘</button>` : '';
+            const aiThinkBtnHTML = isSceneReverse ? '' : `<button class="btn btn-outline" style="width:100%; font-size:11px; margin-bottom:8px; color:var(--primary);" onclick="writePromptWithLLM('${category}', ${index}, '${type}')">🤖 AI 构思画面描述</button>`;
+            const immediateGenBtnHTML = (!currentImg) ? `<button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="genAssetImage('${category}', ${index}, '${type}')">🖼️ 立即生图</button>` : ``;
+
+            return `
+                <div class="asset-card" id="${divId}">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <input type="text" class="asset-name-input" value="${safeName}" oninput="updateDataName('${category}', ${index}, this.value)">
+                        <span style="font-size:11px; color:var(--gray);">${label}</span>
+                        <button class="btn-delete" onclick="deleteAsset('${category}', ${index})">🗑️</button>
+                    </div>
+                    <div class="img-preview-box" id="imgBox_${divId}" onclick="${imgClickAction}">${imgContent}</div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-primary" style="flex:1; font-size:12px;" onclick="togglePrompt('${divId}')">✨ AI 配置</button>
+                        ${redrawBtnHTML}
+                    </div>
+                    <div class="prompt-dialog" id="promptDialog_${divId}">
+                        ${aiThinkBtnHTML}
+                        <div id="desc_${divId}" class="rich-input" contenteditable="true" data-placeholder="描述或 @ 引用..." oninput="updateDataDesc('${category}', ${index}, '${type}', this.innerHTML)">${currentDesc}</div>
+                        <div class="multi-img-grid">${(item.refImages || []).map((img, i) => `<div class="thumb-container"><img src="${img}" class="thumb-img"><div class="thumb-del" onclick="removeRefImg(event, '${category}', ${index}, ${i})">×</div></div>`).join('')}</div>
+                        <button class="btn btn-outline" style="width:100%; font-size:11px;" onclick="triggerMultiUpload('${category}', ${index})">+ 上传参考图</button>
+                        ${immediateGenBtnHTML}
+                    </div>
+                </div>
+            `;
+        }
+        function openImageModal(cat, idx, type, b64, name) { currentPreviewTarget = { cat, idx, type, b64, name }; document.getElementById('modalImg').src = b64; document.getElementById('imageModal').style.display = 'flex'; }
+        function closeImageModal() { document.getElementById('imageModal').style.display = 'none'; }
+        function downloadModalImage() { const a = document.createElement('a'); a.href = currentPreviewTarget.b64; a.download = `AI_${currentPreviewTarget.name}.png`; a.click(); }
+        function deleteModalImage() {
+            if(!confirm("删除图片？")) return;
+            const { cat, idx, type } = currentPreviewTarget;
+            if (cat === 'scenes') {
+                if (type === 'forward') extractedData.scenes[idx].forwardImg = null;
+                else extractedData.scenes[idx].reverseImg = null;
+            } else extractedData[cat][idx].img = null;
+            saveCurrentState(); renderAssetsUI(); closeImageModal();
+        }
+
+       function uploadAssetResult(cat, idx, type) {
+    triggerUpload(async (b64) => {
+        log("⏳ 正在同步图片至云端...");
+        // 🌟 拦截 Base64 转为云端链接
+        b64 = await window.uploadMediaToCloud(b64, 'png');
+        if (cat === 'scenes') {
+            if (type === 'forward') extractedData.scenes[idx].forwardImg = b64;
+            else extractedData.scenes[idx].reverseImg = b64;
+        } else extractedData[cat][idx].img = b64;
+        renderAssetsUI(); 
+        log("✅ 替换图片已存入云端！");
+    });
+}
+        function triggerMultiUpload(cat, idx) { currentUploadTarget = { cat, idx }; document.getElementById('multiUploader').click(); }
+        document.getElementById('multiUploader').onchange = async function(e) {
+    const files = Array.from(e.target.files);
+    if(!files.length) return;
+    
+    log(`⏳ 正在上传 ${files.length} 张本地图片到云端...`);
+    for (let file of files) {
+        try {
+            // 🌟 直接调用云盘引擎
+            const cloudUrl = await window.uploadMediaToCloud(file);
+            if (cloudUrl) {
+                const {cat, idx} = currentUploadTarget;
+                if(!extractedData[cat][idx].refImages) extractedData[cat][idx].refImages = [];
+                extractedData[cat][idx].refImages.push(cloudUrl);
+                log(`✅ 成功存入云盘：${cloudUrl}`);
+            }
+        } catch (err) {
+            log(`❌ 上传异常: ${err.message}`);
+        }
+    }
+    renderAssetsUI();
+    this.value = ""; 
+};
+
+        function showMentionMenu(range, images) {
+            const rect = range.getBoundingClientRect();
+            const menu = document.getElementById('mentionMenu');
+            menu.style.display = 'block';
+            menu.style.left = rect.left + 'px'; 
+            menu.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+            document.getElementById('mentionMenuGrid').innerHTML = images.map((img) => `
+                <div class="mention-item" style="cursor:pointer;" onmousedown="event.preventDefault();insertPill('${img}')">
+                    <img src="${img}" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:4px;">
+                </div>
+            `).join('');
+        }
+
+        function insertPill(b64) {
+            document.getElementById('mentionMenu').style.display='none';
+            const sel = window.getSelection(); 
+            sel.removeAllRanges(); 
+            sel.addRange(savedRange);
+            savedRange.setStart(savedRange.startContainer, savedRange.startOffset - 1);
+            savedRange.deleteContents();
+            const span = document.createElement('span');
+            span.className = 'inline-pill'; span.contentEditable = 'false';
+            span.setAttribute('data-b64', b64);
+            span.innerHTML = `<img src="${b64}">Ref`;
+            
+            span.onmouseenter = (e) => {
+                const hp = document.getElementById('hoverPreview');
+                document.getElementById('hoverImg').src = b64;
+                hp.style.display = 'block';
+                hp.style.left = (e.clientX + 15) + 'px'; hp.style.top = (e.clientY + 15) + 'px';
+            };
+            span.onmouseleave = () => { document.getElementById('hoverPreview').style.display='none'; };
+            
+            savedRange.insertNode(span);
+            const space = document.createTextNode('\u00A0');
+            savedRange.setStartAfter(span); savedRange.insertNode(space);
+            savedRange.collapse(false); 
+            sel.removeAllRanges(); 
+            sel.addRange(savedRange);
+        }
+
+        async function writePromptWithLLM(cat, idx, type) {
+            const divId = `asset_${cat}_${idx}_${type}`;
+            const inputEl = document.getElementById(`desc_${divId}`);
+            try {
+                const script = document.getElementById('scriptInput').value.trim();
+                const styleKey = document.getElementById('styleSelect').value;
+                const styleName = (styleKey && STYLE_MODIFIERS[styleKey]) ? STYLE_MODIFIERS[styleKey].name : "默认风格";
+                const currentLLM = document.getElementById('llmModelSelect').value || "deepseek-chat";
+                const name = extractedData[cat][idx].name;
+
+                // 👇 插入这三行扣费代码 👇
+                const cost = currentLLM.includes('gemini') ? 2 : 1;
+                if (!(await checkAndDeductCredits(cost, "AI 构思画面"))) return;
+                // 👆 插入结束 👆
+
+                inputEl.innerText = "🤖 思考中...";
+                let endpoint = currentLLM.startsWith('gemini') ? '/api/gemini/chat' : '/api/deepseek/chat';
+                const apiModelName = currentLLM; 
+
+                const res = await apiRequest(endpoint, { 
+                    model: apiModelName, 
+                    messages: [
+                        { role: "system", content: "你是一位资深美术指导，专注于视觉描述。" },
+                        { role: "user", content: window.AI_PROMPTS[cat].llmPrompt.replace(/{name}/g, name).replace(/{script}/g, script).replace(/{style}/g, styleName) }
+                    ] 
+                });
+                
+                let desc = (res.choices ? res.choices[0].message.content : res.candidates[0].content.parts[0].text).trim();
+
+               if (cat === 'scenes') {
+                    const north = desc.match(/North:\s*([\s\S]*?)(?=South:|$)/i);
+                    const south = desc.match(/South:\s*([\s\S]*?)$/i);
+                    
+                    const forwardText = north ? north[1].trim() : desc;
+                    const reverseText = south ? south[1].trim() : "";
+                    
+                    // 赋值并立即保存到提取的数据中
+                    inputEl.innerText = forwardText;
+                    extractedData.scenes[idx].forwardDesc = forwardText;
+                    
+                    const revEl = document.getElementById(`desc_asset_scenes_${idx}_reverse`);
+                    if (revEl && south) {
+                        revEl.innerText = reverseText;
+                        extractedData.scenes[idx].reverseDesc = reverseText;
+                    }
+                } else {
+                    inputEl.innerText = desc;
+                    extractedData[cat][idx].description = desc;
+                }
+                saveCurrentState(); // 🌟 核心修复: 生成完毕立刻落库，防止被冲刷
+                log(`✅ [${name}] AI 构思成功`);
+            } catch (e) { 
+                inputEl.innerText = ""; 
+                if (e.message.includes('limit: 0') || e.message.includes('429') || e.message.includes('404')) {
+                    log(`⚠️ Google 接口限制，自动降级至 DeepSeek`);
+                    document.getElementById('llmModelSelect').value = 'deepseek-chat';
+                    DB.set('llmModelSelect', 'deepseek-chat');
+                    alert("Google 模型接口受限或不可用，已自动切换回【DeepSeek】，请再次点击“AI构思”即可！");
+                } else {
+                    log(`❌ AI 构思异常: ${e.message}`); 
+                }
+            }
+        }
+async function genAssetImage(cat, idx, type) {
+            const styleKey = document.getElementById('styleSelect').value;
+            const selectedModel = document.getElementById('imageModelSelect').value;
+            const ratioVal = document.getElementById('ratioSelect').value;
+            const divId = `asset_${cat}_${idx}_${type}`;
+            const inputEl = document.getElementById(`desc_${divId}`);
+            const imgBox = document.getElementById(`imgBox_${divId}`);
+
+            let stylePrefix = (styleKey && STYLE_MODIFIERS[styleKey]) ? (STYLE_MODIFIERS[styleKey][cat === 'scenes_reverse' ? 'scenes' : cat] || "") : "";
+
+            let rawText = "";
+            let inlineImgs = [];
+            if (inputEl) {
+                inputEl.childNodes.forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE) rawText += node.textContent;
+                    else if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('inline-pill')) inlineImgs.push(node.getAttribute('data-b64'));
+                    else if (node.nodeType === Node.ELEMENT_NODE) rawText += node.innerText;
+                });
+            }
+
+            let tmplKey = (cat === 'scenes' && type === 'reverse') ? 'scenes_reverse' : cat;
+            const template = window.AI_PROMPTS[tmplKey];
+
+            if (cat === 'scenes' && type === 'reverse' && extractedData.scenes[idx].forwardImg) inlineImgs = [extractedData.scenes[idx].forwardImg];
+
+            const fullPrompt = `${stylePrefix}${template.prefix || ""}${rawText}${template.suffix || ""}`;
+            
+
+             // 👇 插入这三行扣费代码 👇
+            const cost = selectedModel.includes('gemini') ? 5 : 3;
+            if (!(await checkAndDeductCredits(cost, "生成/重绘资产图片"))) return;
+            // 👆 插入结束 👆
+
+            log(`📝 提交生图指令: ${fullPrompt}`);
+            if (imgBox) imgBox.innerHTML = `<span>🎨 正在生图...</span>`;
+
+            // 🌟 核心修复 1：分模型动态适配分辨率 (解决 Doubao 报错)
+            let sizeVal = template.size || "1920*1080"; 
+            if (selectedModel.includes('doubao')) {
+                if (ratioVal === "9:16" || template.ratio === "9:16") sizeVal = "1440*2560";
+                else if (ratioVal === "1:1" || template.ratio === "1:1") sizeVal = "2048*2048";
+                else if (ratioVal === "21:9" || template.ratio === "21:9") sizeVal = "3440*1440";
+                else if (ratioVal === "4:3" || template.ratio === "4:3") sizeVal = "2304*1728";
+                else sizeVal = "2560*1440"; 
+            } else {
+                if (ratioVal === "9:16" || template.ratio === "9:16") sizeVal = "720*1280";
+                else if (ratioVal === "1:1" || template.ratio === "1:1") sizeVal = "1024*1024";
+                else if (ratioVal === "21:9" || template.ratio === "21:9") sizeVal = "1280*548";
+                else if (ratioVal === "4:3" || template.ratio === "4:3") sizeVal = "1024*768";
+                else sizeVal = "1920*1080"; 
+            }
+
+            try {
+                // 🌟 核心修复 2：发送 async_mode 暗号给后端
+                const res = await apiRequest('/api/image/create', { 
+                    model: selectedModel, 
+                    prompt: fullPrompt, 
+                    images: inlineImgs, 
+                    ratio: ratioVal || template.ratio, 
+                    size: sizeVal,
+                    async_mode: true  // 👈 绝对不能漏掉
+                });
+
+                let b64 = "";
+
+                // 🌟 核心修复 3：植入前端轮询逻辑 (解决 Wan2.7 超时)
+                if (res.taskId) {
+                    log(`✅ 成功提交排队，获取小票 TaskID: ${res.taskId}`);
+                    if (imgBox) imgBox.innerHTML = `<span>⏳ 云端绘制中...</span>`;
+                    
+                    while (true) {
+                        await new Promise(resolve => setTimeout(resolve, 3500));
+// 🌟 核心修复：必须强行加上您的 Render 服务器前缀！
+const renderBaseURL = "https://proxy-server-web.onrender.com"; 
+
+const pollRes = await fetch(`${renderBaseURL}/api/dashscope/poll/${res.taskId}`, {
+    method: 'GET',
+
+});                 
+                        if (!pollRes.ok) throw new Error(`轮询请求失败 HTTP ${pollRes.status}`);
+                        const pollData = await pollRes.json();
+                        const taskStatus = pollData.output?.task_status || pollData.task_status;
+                        
+if (taskStatus === 'SUCCEEDED') {
+                            const out = pollData.output || {};
+                            
+                            // 1. 标准结果数组格式
+                            if (out.results && out.results.length > 0) {
+                                b64 = out.results[0].url || out.results[0].image_url;
+                            } 
+                            // 2. 🌟 修复：多模态对话格式 (Wan2.7 / Qwen-VL 等常走这里)
+                            else if (out.choices && out.choices[0]?.message?.content) {
+                                const content = out.choices[0].message.content;
+                                const imgItem = Array.isArray(content) ? content.find(c => c.image || c.url) : null;
+                                if (imgItem) b64 = imgItem.image || imgItem.url;
+                                else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
+                            } 
+                            // 3. 极简直返格式
+                            else if (out.image_url) {
+                                b64 = out.image_url;
+                            } else if (out.image) {
+                                b64 = out.image;
+                            }
+                            
+                            if (!b64) {
+                                // 万一还是找不到，把数据打印在按 F12 出来的控制台里，方便我们看究竟在哪
+                                console.error("无法解析完整的云端返回数据:", pollData);
+                                throw new Error("云端已完成，但提取图片链接失败（请按 F12 查看控制台详细数据）");
+                            }
+                            
+                            log(`✅ 阿里云生图完成！`);
+                            break;
+                        
+
+                        } else if (taskStatus === 'FAILED') {
+                            throw new Error(`生成失败: ${pollData.output?.message || pollData.message}`);
+                        } else {
+                            log(`⏳ 云端排队绘制中: ${taskStatus}...`);
+                        }
+                    }
+                } else if (res.data && res.data.length > 0) {
+                    b64 = res.data[0].url;
+                } else {
+                    throw new Error("返回数据异常");
+                }
+
+                // --- 跨域下载及后续保存逻辑 ---
+                if (b64.startsWith('http')) {
+                    try {
+                        const imgRes = await fetch(b64);
+                        const blob = await imgRes.blob();
+                        b64 = await new Promise(r => { const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob); });
+                    } catch (corsErr) {
+                        log(`⚠️ 触发跨域保护，正通过代理下载...`);
+                        const proxyRes = await apiRequest('/api/proxy-image', { url: b64 });
+                        if (proxyRes.base64) {
+                            b64 = proxyRes.base64;
+                        } else {
+                            throw new Error("后端代理下载图片失败");
+                        }
+                    }
+                }
+// 👇 修正位置：在这里将生成的 Base64 永久存入云端
+                if (imgBox) imgBox.innerHTML = `<span>☁️ 正在保存至云端...</span>`;
+                b64 = await window.uploadMediaToCloud(b64, 'png');
+                if (cat === 'scenes') {
+                    if (type === 'forward') extractedData.scenes[idx].forwardImg = b64; 
+                    else extractedData.scenes[idx].reverseImg = b64; 
+                } else { 
+                    extractedData[cat][idx].img = b64; 
+                }
+                
+                renderAssetsUI(); 
+                saveCurrentState();
+                log(`✅ [${extractedData[cat][idx].name}] 图片生成及保存成功！`);
+
+            } catch (e) { 
+                if (imgBox) imgBox.innerHTML = `<span style="color:red">生成失败</span>`; 
+                log(`❌ 生图异常: ${e.message}`); 
+            }
+        }
+
+        function addAsset(cat) { if (cat === 'scenes') extractedData.scenes.push({ name: '新场景', description: '', forwardDesc: '', reverseDesc: '', forwardImg: null, reverseImg: null, refImages: [] }); else extractedData[cat].push({ name: '新项目', description: '', img: null, refImages: [] }); renderAssetsUI(); }
+        function deleteAsset(cat, idx) { if (confirm(`确认删除？`)) { extractedData[cat].splice(idx, 1); renderAssetsUI(); } }
+        function updateDataName(cat, idx, val) { extractedData[cat][idx].name = val; saveCurrentState(); }
+        function updateDataDesc(cat, idx, type, val) { 
+            if (cat === 'scenes') {
+                if (type === 'forward') extractedData[cat][idx].forwardDesc = val;
+                else extractedData[cat][idx].reverseDesc = val;
+            } else {
+                extractedData[cat][idx].description = val;
+            }
+            saveCurrentState(); 
+        }
+        function togglePrompt(divId) { const d = document.getElementById(`promptDialog_${divId}`); d.style.display = d.style.display === 'block' ? 'none' : 'block'; }
+        
+        async function goToNextStep() {
+            const s = document.getElementById('scriptInput').value.trim();
+            if (!s) return alert("剧本不能为空！");
+            try { await DB.set('scriptText', s); } catch(e){}
+            location.href = 'html/module2.html';
+        }
+// 🌟 新增：保存第一步的剧本与视觉资产，并返回项目工作台
+        async function saveAndBack() {
+            try {
+                // 保存剧本输入框的内容
+                const s = document.getElementById('scriptInput').value.trim();
+                if (s) {
+                    await DB.set('scriptText', s);
+                }
+                
+                // 确保触发页面上已有的全局资产保存
+                await saveCurrentState();
+                
+                // 🌟 注意：这里和 module2/3 不同，不需要 ../ 前缀
+                location.href = 'dashboard.html';
+            } catch (e) {
+                // 即使保存失败也强制返回
+                location.href = 'dashboard.html';
+            }
+        }
+    </script>
+</body>
+</html>

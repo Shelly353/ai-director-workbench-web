@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 独立生图控制台</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* 🌟 CSS 样式区域（已经清除了错误混入的 JS 代码） */
+        .credit-badge { background: #fff5f5; color: #ff6b6b; padding: 4px 10px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 12px; }
+        
+        .console-wrapper { 
+            position: fixed; bottom: 0; left: 0; width: 100%; background: #1e1e1e; 
+            z-index: 9999; transition: transform 0.3s ease; 
+            transform: translateY(calc(100% - 30px)); border-top: 1px solid #444; 
+        }
+        .console-wrapper.open { transform: translateY(0); }
+        .console-header { height: 30px; background: #2d2d2d; color: #ccc; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-size: 11px; cursor: pointer; user-select: none; }
+        .console-header:hover { background: #3d3d3d; color: #fff; }
+        .console-content { height: 120px; padding: 10px 20px; color: #4af626; font-family: 'Consolas', monospace; font-size: 11px; overflow-y: auto; box-sizing: border-box; white-space: pre-wrap; border-top: 1px solid #333; }
+
+        body { background: #f2f3f5; margin: 0; padding: 20px; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; }
+        
+        .toolbar { background: #fff; padding: 15px 20px; border-radius: 10px; display: flex; gap: 15px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; flex-shrink: 0; }
+        .toolbar select { padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc; outline: none; }
+        
+        .main-workspace { display: flex; gap: 20px; flex: 1; min-height: 0; }
+        
+        .left-panel { flex: 1; display: flex; flex-direction: column; gap: 15px; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow-y: auto; }
+        .ref-section { border: 1px dashed #dcdfe6; border-radius: 8px; padding: 15px; background: #fafafa; }
+        .ref-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+        .ref-item { position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; border: 1px solid #eee; }
+        .ref-item img { width: 100%; height: 100%; object-fit: cover; }
+        .ref-del { position: absolute; top: 0; right: 0; background: rgba(245,63,63,0.9); color: #fff; width: 16px; height: 16px; font-size: 10px; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+        
+        .rich-input { flex: 1; min-height: 120px; padding: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; font-size: 14px; line-height: 1.6; overflow-y: auto; }
+        .rich-input:focus { border-color: var(--primary); }
+        .inline-pill { display: inline-flex; align-items: center; background: #e8f3ff; border: 1px solid #bcdcff; border-radius: 4px; padding: 2px 8px; margin: 0 4px; font-size: 12px; color: var(--primary); cursor: default; }
+        .inline-pill img { width: 18px; height: 18px; object-fit: cover; border-radius: 2px; margin-right: 4px; }
+        
+        .right-panel { width: 45%; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; flex-direction: column; overflow: hidden; }
+        .result-img-box { flex: 1; background: #1e1e1e; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; }
+        .result-img-box img { max-width: 100%; max-height: 100%; object-fit: contain; display: none; }
+        .result-status { color: #86909c; font-size: 14px; }
+        .result-actions { padding: 15px; display: flex; gap: 10px; background: #fff; border-top: 1px solid #eee; }
+        
+        .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: bold; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+        .btn-danger { background: #f53f3f; color: #fff; }
+        .btn-success { background: #00b42a; color: #fff; }
+        .btn:disabled { background: #e5e6eb; color: #86909c; cursor: not-allowed; border-color: transparent; }
+
+        #globalAssetModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        #globalAssetContent { background: #fff; width: 80%; height: 80%; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; }
+        #globalAssetGrid { display: flex; flex-wrap: wrap; gap: 15px; overflow-y: auto; flex: 1; margin-top: 15px; }
+
+        #mentionMenu { display: none; position: fixed; background: #fff; border: 1px solid #ddd; padding: 8px; border-radius: 8px; z-index: 2000; box-shadow: 0 8px 24px rgba(0,0,0,0.15); width: 260px; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+
+    <div class="toolbar">
+        <strong style="font-size: 16px;">🎨 高级生图工作台</strong>
+        <span style="color: #86909c; font-size: 12px; margin-right: auto;" id="rowIdDisplay"></span>
+        
+        <select id="modelSelect">
+            <option value="wan2.7-image">Wan2.7 Image</option>
+            <option value="doubao-seedream-5.0-lite">Doubao Seedream</option>
+            <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash</option>
+        </select>
+        
+        <label style="font-size: 12px; font-weight: bold;">比例:</label>
+        <select id="ratioSelect">
+            <option value="16:9">16:9</option>
+            <option value="9:16">9:16</option>
+            <option value="21:9">21:9</option>
+            <option value="1:1">1:1</option>
+            <option value="4:3">4:3</option>
+        </select>
+        
+        <span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
+    </div>
+
+    <div class="main-workspace">
+        <div class="left-panel">
+            <div class="ref-section">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 13px; font-weight: bold;">📚 参考资产池 (输入 @ 即可调用)</span>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-outline" onclick="openGlobalAssetModal()">+ 导入全局资产</button>
+                        <button class="btn btn-outline" onclick="document.getElementById('localUploader').click()">+ 本地上传</button>
+                        <input type="file" id="localUploader" accept="image/*" style="display:none;" onchange="handleLocalUpload(event)">
+                    </div>
+                </div>
+                <div class="ref-grid" id="refGrid"></div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 13px; font-weight: bold;">📝 画面提示词 (风格已自动继承)</span>
+            </div>
+            <div class="rich-input" id="promptInput" contenteditable="true" data-placeholder="详细描述画面内容... 输入 @ 插入上方参考图..."></div>
+            
+            <button id="btnGenerate" class="btn btn-primary" style="padding: 12px; font-size: 14px;" onclick="generateImage()">🚀 开始生成画面</button>
+        </div>
+
+        <div class="right-panel">
+            <div class="result-img-box" id="resultBox">
+                <span class="result-status" id="resultStatus">等待生图...</span>
+                <img id="resultImg" src="">
+            </div>
+            <div class="result-actions">
+                <button id="btnConfirm" class="btn btn-success" style="flex:1; display:none;" onclick="confirmAndReturn()">✅ 确认并添加到分镜</button>
+                <button id="btnDownload" class="btn btn-outline" style="display:none;" onclick="downloadImage()">📥 下载</button>
+                <button id="btnDelete" class="btn btn-danger" style="display:none;" onclick="clearResult()">🗑️ 放弃</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="globalAssetModal">
+        <div id="globalAssetContent">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:10px;">
+                <h3 style="margin:0;">选择要导入的全局资产</h3>
+                <span style="cursor:pointer; font-size:24px;" onclick="document.getElementById('globalAssetModal').style.display='none'">×</span>
+            </div>
+            <div id="globalAssetGrid"></div>
+        </div>
+    </div>
+
+    <div id="mentionMenu"><div id="mentionMenuGrid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px;"></div></div>
+    
+    <div class="console-wrapper" id="consoleWrapper">
+        <div class="console-header" onclick="toggleConsole()">
+            <span>📝 实时运行日志 (调试模式)</span>
+            <span id="consoleToggleIcon">▲ 点击展开</span>
+        </div>
+        <div class="console-content" id="logConsole"></div>
+    </div>
+
+    <script src="../js/app.js?v=2.1"></script>
+    <script>
+        // ==========================================
+        // 🌟 正确归位的：Supabase 连接与扣费逻辑
+        // ==========================================
+        const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // 获取并显示初始积分
+        async function fetchCredits() {
+            const userId = localStorage.getItem('userId');
+            if (!userId) return;
+            try {
+                const { data } = await supabaseClient.from('profiles').select('credits').eq('user_id', userId).single();
+                if (data) {
+                    document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
+                    localStorage.setItem('userCredits', data.credits);
+                }
+            } catch (e) { console.error("获取积分失败:", e); }
+        }
+
+        async function checkAndDeductCredits(cost, taskName) {
+            const userId = localStorage.getItem('userId');
+            if (!userId) { alert("登录已过期，请重新登录！"); return false; }
+            try {
+                const { data, error } = await supabaseClient.from('profiles').select('credits').eq('user_id', userId).single();
+                if (error || !data) throw new Error("查账失败");
+                
+                if (data.credits < cost) {
+                    alert(`❌ 积分不足！\n\n执行【${taskName}】需要 ${cost} 💎\n您当前剩余: ${data.credits} 💎`);
+                    return false;
+                }
+                
+                const newCredits = data.credits - cost;
+                await supabaseClient.from('profiles').update({ credits: newCredits }).eq('user_id', userId);
+                localStorage.setItem('userCredits', newCredits);
+                
+                // 扣费成功后更新顶部 UI
+                document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
+                if(typeof log === 'function') log(`💎 扣费成功：[${taskName}] 消耗 ${cost} 积分，剩余 ${newCredits} 💎。`);
+                return true; 
+            } catch (err) {
+                alert("计费系统网络异常，请稍后重试。"); return false;
+            }
+        }
+
+        // ==========================================
+        // UI 与生图控制逻辑
+        // ==========================================
+        function toggleConsole() {
+            const wrapper = document.getElementById('consoleWrapper');
+            const icon = document.getElementById('consoleToggleIcon');
+            wrapper.classList.toggle('open');
+            icon.innerText = wrapper.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开';
+        }
+
+        function log(msg) {
+            const consoleEl = document.getElementById('logConsole');
+            if (consoleEl) {
+                const time = new Date().toLocaleTimeString();
+                consoleEl.innerText += `[${time}] ${msg}\n`;
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
+        }
+
+        const STYLE_MODIFIERS = {
+            "realistic": "Award-winning photography, photorealistic portrait, highly detailed skin texture, 2k resolution, cinematic lighting, shot on 35mm lens, realistic human skin. ",
+            "anime": "Anime style, 2D flat shading, cel shaded, anime character design. ",
+            "comic": "Marvel/DC comic book style, bold outlines, halftone shading. ",
+            "cyberpunk": "Cyberpunk aesthetic, neon rim lighting, high-tech cybernetics. ",
+            "ink": "Traditional Chinese ink wash painting style, ethereal mood. "
+        };
+
+        let rowId = new URLSearchParams(window.location.search).get('rowId');
+        let localRefPool = []; 
+        let globalExtractedData = null;
+        let globalStyle = null;
+        let savedRange = null;
+        let generatedB64 = null;
+
+        window.onload = async () => {
+   // 🌟 核心安全：检查登录凭证
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+        // 如果没有找到身份信息，不给任何提示，直接强行踢回登录页
+        // 使用 replace 而不是 href，是为了不让用户再通过“返回”跳回来
+        window.location.replace('index.html'); 
+        return;
+    }
+
+            // 🌟 页面加载时自动拉取积分！
+            await fetchCredits();
+
+            document.getElementById('rowIdDisplay').innerText = `目标分镜: ${rowId || '未知'}`;
+            globalExtractedData = await DB.get('extractedData') || {};
+            globalStyle = await DB.get('styleSelect');
+            
+            const savedRatio = await DB.get('globalRatio');
+            if(savedRatio) document.getElementById('ratioSelect').value = savedRatio;
+            
+            const imgConfig = await DB.get('image_config');
+            if(imgConfig && imgConfig.model) document.getElementById('modelSelect').value = imgConfig.model;
+
+            document.getElementById('promptInput').addEventListener('input', handleRichInput);
+            renderRefGrid();
+        };
+
+        // --- 参考资产管理 ---
+        function openGlobalAssetModal() {
+            let pool = [];
+            const add = (n,b) => { if(b && !pool.find(x=>x.b64===b)) pool.push({name:n, b64:b}); };
+            
+            ['characters', 'props', 'effects'].forEach(cat => {
+                if(globalExtractedData[cat]) globalExtractedData[cat].forEach(x => { add(x.name, x.img); if(x.refImages) x.refImages.forEach(r=>add(x.name+'-参考', r)); });
+            });
+            if(globalExtractedData.scenes) globalExtractedData.scenes.forEach(s => { add(s.name+'-正', s.forwardImg); add(s.name+'-反', s.reverseImg); if(s.refImages) s.refImages.forEach(r=>add(s.name+'-参考', r)); });
+
+            document.getElementById('globalAssetGrid').innerHTML = pool.map(item => `
+                <div style="width:100px; cursor:pointer; text-align:center; padding:5px; border:2px solid transparent; border-radius:8px;" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'" onclick="addRefToPool('${item.name}', '${item.b64}')">
+                    <img src="${item.b64}" style="width:100%; height:100px; object-fit:cover; border-radius:6px;">
+                    <div style="font-size:11px; margin-top:5px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${item.name}</div>
+                </div>
+            `).join('');
+            document.getElementById('globalAssetModal').style.display = 'flex';
+        }
+
+        function addRefToPool(name, b64) {
+            if(!localRefPool.find(x => x.b64 === b64)) { localRefPool.push({ name, b64 }); renderRefGrid(); }
+            document.getElementById('globalAssetModal').style.display = 'none';
+        }
+
+        function removeRef(index) { localRefPool.splice(index, 1); renderRefGrid(); }
+
+        function renderRefGrid() {
+            const grid = document.getElementById('refGrid');
+            if (!grid) return;
+            if (localRefPool.length === 0) {
+                grid.innerHTML = '<span style="font-size:12px; color:#c9cdd4;">暂无参考图，请导入或上传。</span>';
+                return;
+            }
+            grid.innerHTML = localRefPool.map((item, i) => `
+                <div class="ref-item"><img src="${item.b64}"><div class="ref-del" onclick="removeRef(${i})">×</div></div>
+            `).join('');
+        }
+
+        async function handleLocalUpload(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            log(`⏳ 正在将本地参考图转存至云端图床...`);
+            try {
+                const cloudUrl = await window.uploadMediaToCloud(file);
+                if (cloudUrl) {
+                    localRefPool.push({ name: file.name || '本地图片', b64: cloudUrl });
+                    renderRefGrid();
+                    log(`✅ 参考图已就绪：${cloudUrl}`);
+                }
+            } catch (err) { log(`❌ 上传失败: ${err.message}`); }
+            e.target.value = '';
+        }
+
+        function handleRichInput(e) {
+            const sel = window.getSelection();
+            if(sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            const text = range.startContainer.textContent.substring(0, range.startOffset);
+            if (text.endsWith('@')) {
+                if(localRefPool.length === 0) return alert("参考资产池为空，请先添加参考图！");
+                savedRange = range.cloneRange();
+                const rect = range.getBoundingClientRect();
+                const menu = document.getElementById('mentionMenu');
+                menu.style.display = 'block'; menu.style.left = rect.left + 'px'; menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+                document.getElementById('mentionMenuGrid').innerHTML = localRefPool.map((item) => `
+                    <div style="aspect-ratio:1; border-radius:4px; overflow:hidden; cursor:pointer;" onmousedown="event.preventDefault();insertMentionPill('${item.b64}', '${item.name}')">
+                        <img src="${item.b64}" style="width:100%;height:100%;object-fit:cover;">
+                    </div>
+                `).join('');
+            } else { document.getElementById('mentionMenu').style.display = 'none'; }
+        }
+
+        function insertMentionPill(b64, name) {
+            document.getElementById('mentionMenu').style.display = 'none';
+            const sel = window.getSelection();
+            sel.removeAllRanges(); sel.addRange(savedRange);
+            savedRange.setStart(savedRange.startContainer, savedRange.startOffset - 1);
+            savedRange.deleteContents();
+            const span = document.createElement('span');
+            span.className = 'inline-pill'; span.contentEditable = 'false'; span.setAttribute('data-b64', b64);
+            span.innerHTML = `<img src="${b64}"><span>${name}</span>`;
+            savedRange.insertNode(span);
+            savedRange.setStartAfter(span); savedRange.insertNode(document.createTextNode('\u00A0'));
+            savedRange.collapse(false); sel.removeAllRanges(); sel.addRange(savedRange);
+        }
+
+        async function generateImage() {
+            const inputEl = document.getElementById('promptInput');
+            const modelSelect = document.getElementById('modelSelect');
+            const selectedModel = modelSelect.value;
+            const ratioVal = document.getElementById('ratioSelect').value;
+            
+            let rawText = "";
+            let inlineImgs = [];
+            
+            inputEl.childNodes.forEach(node => {
+                if (node.nodeType === Node.TEXT_NODE) rawText += node.textContent;
+                else if (node.nodeType === Node.ELEMENT_NODE) {
+                    if (node.classList.contains('inline-pill')) {
+                        inlineImgs.push(node.getAttribute('data-b64'));
+                        rawText += ` [参考图${inlineImgs.length}: ${node.innerText}] `;
+                    } else { rawText += node.innerText; }
+                }
+            });
+
+            if(!rawText.trim() && inlineImgs.length === 0) return alert("提示词不能为空！");
+
+            const cost = selectedModel.includes('gemini') ? 5 : 3;
+            if (!(await checkAndDeductCredits(cost, "高级工作台生图"))) return;
+
+            let sizeVal = "";
+            if (selectedModel.includes('doubao')) {
+                if (ratioVal === "9:16") sizeVal = "1440*2560"; else if (ratioVal === "1:1") sizeVal = "2048*2048"; else if (ratioVal === "21:9") sizeVal = "3440*1440"; else if (ratioVal === "4:3") sizeVal = "2304*1728"; else sizeVal = "2560*1440"; 
+            } else {
+                if (ratioVal === "9:16") sizeVal = "720*1280"; else if (ratioVal === "1:1") sizeVal = "1024*1024"; else if (ratioVal === "21:9") sizeVal = "1280*548"; else if (ratioVal === "4:3") sizeVal = "1024*768"; else sizeVal = "1920*1080"; 
+            }
+
+            const stylePrefix = (globalStyle && STYLE_MODIFIERS[globalStyle]) ? STYLE_MODIFIERS[globalStyle] : "";
+            const sysInject = inlineImgs.length > 1 ? "【系统指令：请识别提示词中的[参考图X]标识，将多个参考对象的特征融合】" : "";
+            const finalPrompt = stylePrefix + sysInject + rawText;
+            
+            const btn = document.getElementById('btnGenerate');
+            const status = document.getElementById('resultStatus');
+            btn.disabled = true; btn.innerText = `⏳ 生成中...`;
+            clearResult();
+            status.innerText = `🚀 正在提交...`;
+
+            try {
+                const res = await apiRequest('/api/image/create', { 
+                    model: selectedModel, prompt: finalPrompt, images: inlineImgs, ratio: ratioVal, size: sizeVal, async_mode: true
+                });
+
+                let b64 = "";
+
+                if (res.taskId) {
+                    log(`✅ 排队成功，TaskID: ${res.taskId}`);
+                    while (true) {
+                        await new Promise(resolve => setTimeout(resolve, 3500));
+                        let currentUrl = typeof API_BASE !== 'undefined' ? API_BASE : "https://proxy-server-web.onrender.com"; 
+                        const userToken = localStorage.getItem('userToken'); // 🌟 安全 Token
+
+                        const pollRes = await fetch(`${currentUrl}/api/dashscope/poll/${res.taskId}`, {
+                            method: 'GET',
+                            headers: { 'Authorization': `Bearer ${userToken}` } // 🌟 修复：补充服务器需要的访问令牌
+                        });
+                        
+                        if (!pollRes.ok) throw new Error(`轮询失败 HTTP ${pollRes.status}`);
+                        const pollData = await pollRes.json();
+                        const taskStatus = pollData.output?.task_status || pollData.task_status;
+                        
+                        if (taskStatus === 'SUCCEEDED') {
+                            const out = pollData.output || {};
+                            if (out.results && out.results.length > 0) b64 = out.results[0].url || out.results[0].image_url;
+                            else if (out.choices && out.choices[0]?.message?.content) {
+                                const content = out.choices[0].message.content;
+                                const imgItem = Array.isArray(content) ? content.find(c => c.image || c.url) : null;
+                                if (imgItem) b64 = imgItem.image || imgItem.url; else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
+                            } else if (out.image_url) b64 = out.image_url;
+                            else if (out.image) b64 = out.image;
+                            
+                            if (!b64) throw new Error("提取图片链接失败");
+                            break;
+                        } else if (taskStatus === 'FAILED') {
+                            throw new Error(`阿里云生图失败: ${pollData.output?.message || pollData.message}`);
+                        }
+                    }
+                } else if (res.data && res.data.length > 0) {
+                    b64 = res.data[0].url;
+                } else throw new Error("未包含图片地址或 TaskID");
+
+                const imgEl = document.getElementById('resultImg'); 
+                if (b64.startsWith('http')) {
+                    status.innerText = "📥 AI 绘制完毕，正在安全下载图片...";
+                    try {
+                        const imgRes = await fetch(b64);
+                        if (!imgRes.ok) throw new Error("CORS Blocked");
+                        const blob = await imgRes.blob();
+                        b64 = await new Promise(r => { const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob); });
+                    } catch (corsErr) {
+                        const proxyRes = await apiRequest('/api/proxy-image', { url: b64 });
+                        if (proxyRes.base64) b64 = proxyRes.base64; else throw new Error("代理下载图片失败");
+                    }
+                }
+
+                status.innerText = "☁️ 正在永久保存至云端...";
+                b64 = await window.uploadMediaToCloud(b64, 'png');
+                
+                generatedB64 = b64;
+                imgEl.src = b64; 
+                imgEl.onload = () => { status.style.display = 'none'; imgEl.style.display = 'block'; };
+
+                document.getElementById('btnConfirm').style.display = 'block';
+                document.getElementById('btnDownload').style.display = 'block';
+                document.getElementById('btnDelete').style.display = 'block';
+                
+            } catch (e) {
+                status.innerText = `❌ 生图失败: ${e.message}`; log(`❌ 生图失败: ${e.message}`);
+            } finally {
+                btn.disabled = false; btn.innerText = "🚀 重新生成画面";
+            }
+        }
+
+        function clearResult() {
+            generatedB64 = null;
+            document.getElementById('resultImg').style.display = 'none';
+            document.getElementById('resultImg').src = '';
+            document.getElementById('resultStatus').style.display = 'block';
+            document.getElementById('resultStatus').innerText = "等待生图...";
+            document.getElementById('btnConfirm').style.display = 'none';
+            document.getElementById('btnDownload').style.display = 'none';
+            document.getElementById('btnDelete').style.display = 'none';
+        }
+
+        function downloadImage() {
+            if(!generatedB64) return;
+            const a = document.createElement('a');
+            a.href = generatedB64;
+            a.download = `AI_Gen_${Date.now()}.png`; a.click();
+        }
+
+        function confirmAndReturn() {
+            if(!generatedB64) return;
+            if (window.parent && window.parent.addGeneratedImageToRow) window.parent.addGeneratedImageToRow(rowId, generatedB64);
+            else alert("未检测到父页面连接，无法保存！");
+        }
+    </script>
+</body>
+</html>
