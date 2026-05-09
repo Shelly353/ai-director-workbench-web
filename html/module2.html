@@ -505,8 +505,18 @@ function renderStoryboardUI() {
             document.querySelectorAll('.rich-input').forEach(el => { el.addEventListener('input', handleRichInput); });
         }
 
-        function openGlobalImport(rowId) {
+// 🌟 将原有的 openGlobalImport 替换为这个异步刷新版
+        async function openGlobalImport(rowId) {
             currentImportRowId = rowId;
+            
+            // --- 🌟 核心修复：打开前强制从云端同步最新资产！ ---
+            // 这样就能完美接收到刚从生图控制台存进去的新图片了
+            const latestData = await DB.get('extractedData');
+            if (latestData) {
+                extractedData = latestData;
+            }
+            // ---------------------------------------------------
+
             let pool = [];
             const add = (n,b) => { if(b && !pool.find(x=>x.b64===b)) pool.push({name:n, b64:b}); };
             
