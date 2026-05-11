@@ -10,67 +10,34 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { background: #f4f5f9; margin: 0; padding-bottom: 60px; font-family: system-ui, -apple-system, sans-serif; }
-        
         .header { position: sticky; top: 0; z-index: 1000; background: #ffffff; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e6eb; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         .breadcrumb { display: flex; align-items: center; font-size: 20px; font-weight: bold; color: #1d2129; gap: 10px; }
         .breadcrumb-link { cursor: pointer; color: #86909c; transition: 0.2s; }
         .breadcrumb-link:hover { color: var(--primary); }
         .breadcrumb-separator { color: #c9cdd4; font-size: 16px; font-weight: normal; }
-        
         .main-container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
-        
-        /* 🌟 恢复：强制 Flexbox 流式布局 */
-        .grid-container { 
-            display: flex !important; 
-            flex-wrap: wrap !important; 
-            gap: 30px !important; 
-            justify-content: flex-start !important; 
-            align-items: flex-start !important;
-        }
-        
-        /* 🌟 恢复：卡片精美样式 */
-        .card { 
-            width: 220px !important; 
-            height: 220px !important; 
-            box-sizing: border-box !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-            align-items: center !important;
-            background: #fff; 
-            border: 1px solid #e5e6eb; 
-            border-radius: 14px; 
-            cursor: pointer; 
-            position: relative; 
-            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.03); 
-        }
+        .grid-container { display: flex !important; flex-wrap: wrap !important; gap: 30px !important; justify-content: flex-start !important; align-items: flex-start !important; }
+        .card { width: 220px !important; height: 220px !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; background: #fff; border: 1px solid #e5e6eb; border-radius: 14px; cursor: pointer; position: relative; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
         .card:hover { transform: translateY(-6px); box-shadow: 0 12px 24px rgba(0,0,0,0.08); border-color: var(--primary); }
-        
         .card-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; opacity: 0; transition: 0.2s; }
         .card:hover .card-actions { opacity: 1; }
         .action-icon { width: 28px; height: 28px; border-radius: 50%; background: #f4f5f9; display: flex; justify-content: center; align-items: center; font-size: 13px; color: #86909c; transition: 0.2s; }
         .action-icon:hover { background: #e8f3ff; color: var(--primary); }
         .action-icon.delete:hover { background: #ffece8; color: #f53f3f; }
-
         .card-icon { font-size: 60px; margin-bottom: 18px; line-height: 1; transition: transform 0.2s; }
         .card:hover .card-icon { transform: scale(1.08); }
-        
         .card-title { font-size: 16px; font-weight: 600; color: #1d2129; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; text-align: center;}
-        
-        /* 🌟 恢复：新建按钮专属样式 */
         .card-add { border: 2px dashed #dcdfe6 !important; background: transparent !important; box-shadow: none !important; }
         .card-add:hover { border-color: var(--primary) !important; background: #f8fbff !important; }
         .card-add .card-icon { color: var(--primary); font-size: 45px; margin-bottom: 10px; }
         .card-add .card-title { color: var(--primary); margin: 0; }
-
         .credit-badge { background: #fff5f5; color: #ff6b6b; padding: 6px 14px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 14px; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <div class="breadcrumb" id="breadcrumbHeader"></div>
+        <div class="breadcrumb" id="breadcrumbHeader">🏠 工作台</div>
         <div style="display:flex; gap:15px; align-items:center;">
             <button id="adminPanelBtn" class="btn btn-outline" style="display:none; border-color:#722ed1; color:#722ed1;" onclick="location.href='admin/admin_panel.html'">📊 管理面板</button>
             <button id="topAddBtn" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold;" onclick="handleTopAddClick()">+ 新建</button>
@@ -79,7 +46,8 @@
     </div>
 
     <div class="main-container">
-        <div class="grid-container" id="gridContainer"></div>
+        <div id="loadingTips" style="text-align:center; padding: 50px; color: #86909c;">正在连接云端数据库，请稍候...</div>
+        <div class="grid-container" id="gridContainer" style="display:none;"></div>
     </div>
 
     <div id="shareModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
@@ -128,8 +96,17 @@
         }
 
         async function loadProjects() {
+            // 🚨 强力诊断 1：捕获拉取列表的错误
             const { data, error } = await supabaseClient.rpc('get_my_projects', { my_email: window.currentUserEmail });
-            if (error) { console.error("RPC 加载失败:", error); return; }
+            
+            document.getElementById('loadingTips').style.display = 'none';
+            document.getElementById('gridContainer').style.display = 'flex';
+
+            if (error) { 
+                alert("🚨 数据库错误 (请检查SQL是否运行):\n" + error.message);
+                console.error("RPC 加载失败:", error); 
+                return; 
+            }
 
             const isAdmin = data.some(p => p.my_role === 'owner' || p.my_role === 'admin');
             document.getElementById('adminPanelBtn').style.display = isAdmin ? 'inline-flex' : 'none';
@@ -143,7 +120,6 @@
                 members: p.members || []
             }));
 
-            // 🌟 核心修复：数据加载完后，必须调用 renderView() 刷新页面
             renderView();
         }
 
@@ -173,7 +149,6 @@
             }
 
             container.innerHTML = list.map(item => {
-                // 🌟 恢复：新建按钮 UI 修复
                 if (item._isAdd) {
                     const titleText = item._type === 'project' ? '新建项目' : '新建分集';
                     const onClickFunc = item._type === 'project' ? 'createProject()' : 'createEpisode()';
@@ -188,7 +163,6 @@
                     </div>`;
                 }
 
-                // 🌟 恢复：正常卡片 UI 修复 (带文件夹/拍板图标)
                 return `
                 <div class="card" onclick="${currentView === 'projects' ? `openProject('${item.id}')` : `enterEpisode('${item.id}')`}">
                     <div class="card-actions">
@@ -210,9 +184,22 @@
             const name = prompt("请输入项目名称:");
             if (name) {
                 const id = 'proj_' + Date.now();
-                await supabaseClient.from('shared_projects').insert([{ id, name, owner_email: window.currentUserEmail }]);
-                await supabaseClient.from('project_members').insert([{ project_id: id, user_email: window.currentUserEmail, role: 'owner', status: 'active' }]);
-                await loadProjects(); // 🌟 这里会拉取数据并触发 renderView
+                
+                // 🚨 强力诊断 2：捕获创建主表的错误
+                const { error: err1 } = await supabaseClient.from('shared_projects').insert([{ id, name, owner_email: window.currentUserEmail }]);
+                if (err1) {
+                    alert("🚨 新建项目失败 (RLS 权限拦截):\n" + err1.message);
+                    return;
+                }
+
+                // 🚨 强力诊断 3：捕获绑定身份的错误
+                const { error: err2 } = await supabaseClient.from('project_members').insert([{ project_id: id, user_email: window.currentUserEmail, role: 'owner', status: 'active' }]);
+                if (err2) {
+                    alert("🚨 绑定管理员身份失败:\n" + err2.message);
+                    return;
+                }
+
+                await loadProjects(); 
             }
         }
 
@@ -222,14 +209,19 @@
             if (name) {
                 const newEp = { id: 'ep_' + Date.now(), name, data: {} };
                 const updatedEpisodes = [...proj.episodes, newEp];
-                await supabaseClient.from('shared_projects').update({ data: { episodes: updatedEpisodes } }).eq('id', activeProjectId);
+                const { error } = await supabaseClient.from('shared_projects').update({ data: { episodes: updatedEpisodes } }).eq('id', activeProjectId);
+                if (error) {
+                    alert("🚨 新建分集失败:\n" + error.message);
+                    return;
+                }
                 await loadProjects();
             }
         }
 
         async function deleteProject(id) {
             if (confirm("确定要删除吗？这将清除云端所有数据。")) {
-                await supabaseClient.from('shared_projects').delete().eq('id', id);
+                const { error } = await supabaseClient.from('shared_projects').delete().eq('id', id);
+                if (error) alert("删除失败: " + error.message);
                 await loadProjects();
             }
         }
@@ -270,10 +262,13 @@
 
         async function inviteMember() {
             const email = document.getElementById('inviteEmail').value;
-            // 调用您的 app.js 中的 apiRequest
-            await apiRequest('/api/project/invite', { projectId: currentShareProjectId, projectName: "剧本项目", inviteeEmail: email, role: 'member' });
-            alert("邀请已发送");
-            document.getElementById('shareModal').style.display = 'none';
+            try {
+                await apiRequest('/api/project/invite', { projectId: currentShareProjectId, projectName: "剧本项目", inviteeEmail: email, role: 'member' });
+                alert("邀请已发送");
+                document.getElementById('shareModal').style.display = 'none';
+            } catch (e) {
+                alert("邀请发送失败：" + e.message);
+            }
         }
 
         async function enterEpisode(epId) {
