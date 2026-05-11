@@ -183,15 +183,9 @@
 
     async function createEpisode() {
     try {
-        // 💡 修复点 1：强制转换类型，确保 activeProjectId 能找到项目
         const proj = projects.find(p => String(p.id) === String(activeProjectId));
-        
-        if (!proj) {
-            console.error("未找到对应项目，ID:", activeProjectId);
-            return;
-        }
+        if (!proj) return;
 
-        // 💡 修复点 2：增加安全保护，防止 episodes 为空
         const currentEpisodes = proj.episodes || [];
         const name = prompt("请输入分集名称:", `第 ${currentEpisodes.length + 1} 集`);
         
@@ -199,7 +193,7 @@
             const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
             const updatedEpisodes = [...currentEpisodes, newEp];
             
-            // 💡 修复点 3：使用解构赋值 ...proj.data，防止覆盖掉原本的角色、剧本等数据
+            // 1. 安全保存到云端
             const { error } = await supabaseClient
                 .from('shared_projects')
                 .update({ 
@@ -209,12 +203,20 @@
 
             if (error) throw error;
             
-            await loadProjects(); // 重新加载列表
-            alert("分集创建成功");
+            // 2. 从云端拉取最新数据（更新全局 projects 数组）
+            await loadProjects(); 
+            
+            // 🌟 3. 核心修复：重新渲染当前项目的分集视图！
+            // 假设您点击项目卡片进入详情时用的函数叫 openProject，我们需要再调一次它来刷新界面
+            if (typeof openProject === 'function') {
+                openProject(activeProjectId);
+            }
+            
+            console.log("✅ 分集创建并渲染成功");
         }
     } catch (e) {
         console.error("创建分集错误:", e.message);
-        alert("操作失败，请看控制台报错");
+        alert("操作失败: " + e.message);
     }
 }
 
