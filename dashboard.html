@@ -242,35 +242,46 @@
         }
 
         // 🌟 核心改进 2：光速渲染与数据安全双管齐下
-       async function createEpisode() {
-    const proj = projects.find(p => p.id === activeProjectId);
-    if (proj) {
-        const name = prompt("请输入新分集的名称：", `第 ${proj.episodes.length + 1} 集`);
-        if (name && name.trim()) {
-            // 1. 生成新分集并推入本地数组
-            const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
-            proj.episodes.push(newEp);
-            
-            // 🚨 已经删除了引发报错的 currentPage = ... 那一行 🚨
+      async function createEpisode() {
+    // 1. 强制字符串匹配，确保万无一失找到当前项目
+    const proj = projects.find(p => String(p.id) === String(activeProjectId));
+    if (!proj) return alert("项目环境丢失，请刷新");
 
-            // 🌟 2. 强制推送到 Supabase 云端数据库！
-            try {
-                const { error } = await supabaseClient
-                    .from('shared_projects')
-                    .update({ data: { episodes: proj.episodes } }) 
-                    .eq('id', activeProjectId);
+    const name = prompt("请输入新分集的名称：", `第 ${proj.episodes.length + 1} 集`);
+    if (name && name.trim()) {
+        // 2. 生成新分集并推入本地数组
+        const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
+        proj.episodes.push(newEp);
 
-                if (error) {
-                    console.error("Supabase 写入报错:", error);
-                    alert("云端保存失败，请检查控制台");
-                    proj.episodes.pop(); // 失败则撤回
-                    return; 
-                }
-                console.log("✅ 分集已成功写入 Supabase 云端！");
-            } catch (err) {
-                console.error("网络异常:", err);
+        // 3. 安全打包：保留原有资产，只更新分集
+        let payload = { ...proj.data, episodes: proj.episodes };
+        let finalData = proj._isString ? JSON.stringify(payload) : payload;
+
+        // 4. 强制推送到 Supabase 云端数据库
+        try {
+            const { error } = await supabaseClient
+                .from('shared_projects')
+                .update({ data: finalData })
+                .eq('id', activeProjectId);
+
+            if (error) {
+                console.error("Supabase 写入报错:", error);
+                alert("云端保存失败，请检查控制台");
+                proj.episodes.pop(); // 失败则撤回本地显示
+                return;
             }
+            
+            console.log("✅ 分集已成功写入 Supabase 云端！");
 
+            // 5. 核心修复：直接调用云端版的渲染函数，彻底消灭旧版的 saveDB()
+            renderView(); 
+
+        } catch (err) {
+            console.error("网络异常:", err);
+            alert("网络异常，保存失败");
+        }
+    }
+}
             // 3. 云端保存成功后，执行本地保存和页面刷新
             saveDB(); 
         }
