@@ -1,4 +1,54 @@
-<script>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 导演 - 项目工作台</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { background: #f4f5f9; margin: 0; padding-bottom: 60px; font-family: system-ui, sans-serif; }
+        .header { position: sticky; top: 0; z-index: 1000; background: #fff; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e6eb; }
+        .grid-container { display: flex !important; flex-wrap: wrap !important; gap: 30px !important; padding: 20px; }
+        .card { width: 220px; height: 220px; background: #fff; border: 1px solid #e5e6eb; border-radius: 14px; cursor: pointer; position: relative; transition: 0.2s; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .card:hover { transform: translateY(-5px); border-color: var(--primary); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+        .card-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; opacity: 0; }
+        .card:hover .card-actions { opacity: 1; }
+        .action-icon { width: 28px; height: 28px; border-radius: 50%; background: #f4f5f9; display: flex; justify-content: center; align-items: center; font-size: 13px; color: #86909c; }
+        .card-title { font-size: 16px; font-weight: 600; margin-top: 12px; text-align: center; width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div id="breadcrumbHeader" style="font-size: 18px; font-weight: bold;">🏠 工作台</div>
+        <div style="display:flex; gap:15px; align-items:center;">
+            <button id="adminPanelBtn" class="btn btn-outline" style="display:none; border-color:#722ed1; color:#722ed1;" onclick="location.href='admin/admin_panel.html'">📊 管理面板</button>
+            <button id="topAddBtn" class="btn btn-primary" onclick="handleTopAddClick()">+ 新建</button>
+            <span id="headerCredit" style="font-weight:bold; color:#ff6b6b;">💎 积分: ...</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="grid-container" id="gridContainer"></div>
+    </div>
+
+    <div id="shareModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
+        <div style="background:#fff; width:450px; border-radius:12px; padding:25px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+                <h3 style="margin:0;">👥 剧组成员协作</h3>
+                <span style="cursor:pointer; font-size:24px;" onclick="document.getElementById('shareModal').style.display='none'">×</span>
+            </div>
+            <div style="display:flex; gap:10px; margin-bottom:15px;">
+                <input type="email" id="inviteEmail" placeholder="输入成员邮箱..." style="flex:1; padding:8px; border:1px solid #ccc; border-radius:4px;">
+                <button class="btn btn-primary" onclick="inviteMember()">邀请</button>
+            </div>
+            <div id="memberList" style="max-height:150px; overflow-y:auto; font-size:12px; border-top:1px solid #eee; padding-top:10px;"></div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+   <script>
         const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -169,3 +219,5 @@
             window.location.href = 'module1.html';
         }
     </script>
+</body>
+</html>
