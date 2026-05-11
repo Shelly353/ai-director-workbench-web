@@ -242,40 +242,41 @@
         }
 
         // 🌟 核心改进 2：光速渲染与数据安全双管齐下
-        async function createEpisode() {
+       async function createEpisode() {
+    const proj = projects.find(p => p.id === activeProjectId);
+    if (proj) {
+        const name = prompt("请输入新分集的名称：", `第 ${proj.episodes.length + 1} 集`);
+        if (name && name.trim()) {
+            // 1. 生成新分集并推入本地数组
+            const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
+            proj.episodes.push(newEp);
+            currentPage = Math.ceil(proj.episodes.length / ITEMS_PER_PAGE);
+
+            // 🌟 2. 核心修复：强制推送到 Supabase 云端数据库！
             try {
-                const proj = projects.find(p => String(p.id) === String(activeProjectId));
-                if (!proj) return alert("项目环境丢失，请刷新");
+                // 使用 proj.episodes 覆盖云端的 episodes 数组
+                const { error } = await supabaseClient
+                    .from('shared_projects')
+                    .update({ data: { episodes: proj.episodes } }) 
+                    .eq('id', activeProjectId);
 
-                const name = prompt("请输入分集名称:", `第 ${proj.episodes.length + 1} 集`);
-                if (name && name.trim()) {
-                    const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
-                    
-                    // 1. 光速渲染：立刻强行插入本地并显示，杜绝白屏等待
-                    proj.episodes.push(newEp);
-                    renderView();
-                    
-                    // 2. 格式转换：根据历史云端格式生成写入包
-                    const updatedEpisodes = [...proj.episodes];
-                    let payload = { ...proj.data, episodes: updatedEpisodes };
-                    let finalData = proj._isString ? JSON.stringify(payload) : payload;
-                    
-                    // 3. 异步写入云端
-                    const { error } = await supabaseClient
-                        .from('shared_projects')
-                        .update({ data: finalData })
-                        .eq('id', activeProjectId);
-
-                    if (error) {
-                        console.error("云端写入出错:", error);
-                        alert("云端同步异常，数据可能未保存成功");
-                    } else {
-                        // 静默刷新底层数据，不阻塞界面操作
-                        loadProjects();
-                    }
+                if (error) {
+                    console.error("Supabase 写入报错:", error);
+                    alert("云端保存失败，请检查 F12 控制台！");
+                    // 如果云端失败，把刚才推入本地的数据撤回，保持内外一致
+                    proj.episodes.pop(); 
+                    return; 
                 }
-            } catch (e) { alert("创建失败: " + e.message); }
+                console.log("✅ 分集已成功写入 Supabase 云端！");
+            } catch (err) {
+                console.error("网络异常:", err);
+            }
+
+            // 3. 云端保存成功后，再执行本地保存和页面刷新
+            saveDB(); 
         }
+    }
+}
 
         async function renameProject(id) {
             const proj = projects.find(p => String(p.id) === String(id));
