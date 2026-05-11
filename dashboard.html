@@ -250,11 +250,11 @@
             // 1. 生成新分集并推入本地数组
             const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
             proj.episodes.push(newEp);
-            currentPage = Math.ceil(proj.episodes.length / ITEMS_PER_PAGE);
+            
+            // 🚨 已经删除了引发报错的 currentPage = ... 那一行 🚨
 
-            // 🌟 2. 核心修复：强制推送到 Supabase 云端数据库！
+            // 🌟 2. 强制推送到 Supabase 云端数据库！
             try {
-                // 使用 proj.episodes 覆盖云端的 episodes 数组
                 const { error } = await supabaseClient
                     .from('shared_projects')
                     .update({ data: { episodes: proj.episodes } }) 
@@ -262,9 +262,8 @@
 
                 if (error) {
                     console.error("Supabase 写入报错:", error);
-                    alert("云端保存失败，请检查 F12 控制台！");
-                    // 如果云端失败，把刚才推入本地的数据撤回，保持内外一致
-                    proj.episodes.pop(); 
+                    alert("云端保存失败，请检查控制台");
+                    proj.episodes.pop(); // 失败则撤回
                     return; 
                 }
                 console.log("✅ 分集已成功写入 Supabase 云端！");
@@ -272,12 +271,11 @@
                 console.error("网络异常:", err);
             }
 
-            // 3. 云端保存成功后，再执行本地保存和页面刷新
+            // 3. 云端保存成功后，执行本地保存和页面刷新
             saveDB(); 
         }
     }
 }
-
         async function renameProject(id) {
             const proj = projects.find(p => String(p.id) === String(id));
             const newName = prompt("重命名项目：", proj.name);
