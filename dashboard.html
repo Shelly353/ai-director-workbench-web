@@ -181,46 +181,40 @@
             }
         }
 
-       async function createEpisode() {
+    async function createEpisode() {
     try {
-        // 1. 获取当前活跃项目对象
-        // 💡 建议：强制转字符串对比，防止 ID 数字/字符串类型不匹配
+        // 💡 修复点 1：强制转换类型，确保 activeProjectId 能找到项目
         const proj = projects.find(p => String(p.id) === String(activeProjectId));
+        
         if (!proj) {
-            alert("⚠️ 未找到项目上下文，请刷新页面");
+            console.error("未找到对应项目，ID:", activeProjectId);
             return;
         }
 
-        // 2. 弹出命名框
-        const episodes = proj.episodes || [];
-        const name = prompt("请输入分集名称:", `第 ${episodes.length + 1} 集`);
+        // 💡 修复点 2：增加安全保护，防止 episodes 为空
+        const currentEpisodes = proj.episodes || [];
+        const name = prompt("请输入分集名称:", `第 ${currentEpisodes.length + 1} 集`);
         
         if (name && name.trim()) {
-            // 3. 构建新分集对象
             const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
-            const updatedEpisodes = [...episodes, newEp];
-
-            // 4. 核心安全更新：合并旧 data
-            // 💡 使用 ...proj.data 展开旧资产（角色、场景等），只覆盖 episodes 这一项
+            const updatedEpisodes = [...currentEpisodes, newEp];
+            
+            // 💡 修复点 3：使用解构赋值 ...proj.data，防止覆盖掉原本的角色、剧本等数据
             const { error } = await supabaseClient
                 .from('shared_projects')
                 .update({ 
-                    data: { 
-                        ...proj.data, 
-                        episodes: updatedEpisodes 
-                    } 
+                    data: { ...proj.data, episodes: updatedEpisodes } 
                 })
                 .eq('id', activeProjectId);
 
             if (error) throw error;
-
-            // 5. 刷新界面
-            await loadProjects();
-            console.log("✅ 分集创建成功，资产已合并");
+            
+            await loadProjects(); // 重新加载列表
+            alert("分集创建成功");
         }
     } catch (e) {
-        console.error("分集创建失败:", e);
-        alert("分集创建失败，请检查网络或控制台报错");
+        console.error("创建分集错误:", e.message);
+        alert("操作失败，请看控制台报错");
     }
 }
 
