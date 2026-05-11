@@ -87,11 +87,16 @@
 
             const isAdmin = data.some(p => p.my_role === 'owner' || p.my_role === 'admin');
             document.getElementById('adminPanelBtn').style.display = isAdmin ? 'inline-flex' : 'none';
-
-            projects = data.map(p => ({
-                id: p.id, name: p.name, episodes: p.data.episodes || [], my_role: p.my_role, my_status: p.my_status, members: p.members || []
-            }));
-            renderView();
+// 🌟 修复版：增加对 p.data 的空值检查
+projects = data.map(p => ({
+    id: p.id, 
+    name: p.name, 
+    // 关键修复：确保 p.data 存在再读取 episodes
+    episodes: (p.data && p.data.episodes) ? p.data.episodes : [], 
+    my_role: p.my_role, 
+    my_status: p.my_status, 
+    members: p.members || []
+}));
         }
 
         function renderView() {
