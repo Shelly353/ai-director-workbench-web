@@ -3,17 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>AI 导演 - 步骤2：分镜匹配</title>
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
     <link rel="stylesheet" href="../css/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-/* 用户状态栏样式 */
-.user-panel { display: flex; align-items: center; gap: 15px; margin-left: 20px; }
-.credit-badge { background: #fff5f5; color: #ff6b6b; padding: 5px 12px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 13px; white-space: nowrap; }
-.logout-btn { color: #86909c; text-decoration: none; font-size: 13px; cursor: pointer; transition: 0.2s; }
-.logout-btn:hover { color: #f53f3f; }
         .header { position: sticky; top: 0; z-index: 1000; background: #ffffff; padding: 20px 25px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e6eb; box-shadow: 0 4px 12px rgba(0,0,0,0.08); min-height: 80px; box-sizing: border-box; }
         .steps { display: flex; gap: 20px; font-size: 15px; }
         .btn { display: inline-flex; align-items: center; justify-content: center; height: 38px; line-height: 1; padding: 0 18px; white-space: nowrap; font-size: 14px; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
@@ -47,10 +38,7 @@
                 <div class="step active">2. 分镜匹配</div>
                 <div class="step">3. 视频生成</div>
             </div>
-        </div> 
-<div style="display:flex; gap:12px; align-items:center;">
-<span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
-    <a class="logout-btn" style="margin-right:15px;" onclick="logout()">退出</a>
+        </div> <div style="display:flex; gap:12px; align-items:center;">
             <select id="g_ratio">
                 <option value="16:9">16:9 横屏</option>
                 <option value="9:16">9:16 竖屏</option>
@@ -128,55 +116,6 @@
         let extractedData = { characters: [], scenes: [], props: [], effects: [] };
         let savedRange = null;
         let currentImportRowId = null;
-// ==========================================
-// 🌟 核心：Supabase 数据库连接与通用扣费系统
-// ==========================================
-const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// 🌟 新增：从云端数据库获取并显示实际积分
-async function fetchCredits() {
-    const userId = localStorage.getItem('userId');
-    if (!userId) return;
-    try {
-        const { data, error } = await supabaseClient
-            .from('profiles')
-            .select('credits')
-            .eq('user_id', userId)
-            .single();
-        if (data) {
-            // 将云端积分渲染到页面右上角
-            document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
-            localStorage.setItem('userCredits', data.credits);
-        }
-    } catch (e) {
-        console.error("获取积分失败:", e);
-    }
-}
-
-// 🌟 统一的服务器端扣费接口
-async function checkAndDeductCredits(actionKey, modelName) {
-    const isGemini = modelName.toLowerCase().includes('gemini');
-    
-    // 直接调用服务器端的 RPC 函数
-    const { data: newCredits, error } = await supabaseClient.rpc('deduct_credits_v2', { 
-        action_key: actionKey, 
-        is_gemini: isGemini 
-    });
-
-    if (error) {
-        alert(`❌ 操作失败：${error.message}`);
-        return false;
-    }
-
-    // 扣费成功，更新 UI 显示
-    document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
-    localStorage.setItem('userCredits', newCredits);
-    log(`💎 服务器已结算：[${actionKey}] 扣费成功，剩余 ${newCredits} 💎。`);
-    return true;
-}
-// ==========================================
 
 // 🌟 新增：保存当前进度并返回
 async function saveAndBack() {
@@ -192,17 +131,8 @@ async function saveAndBack() {
         }
 
 window.onload = async () => {
-
-    // 🌟 核心安全：检查登录凭证
-    const userId = localStorage.getItem('userId');
-    if (!userId) {
-        // 如果没有找到身份信息，不给任何提示，直接强行踢回登录页
-        // 使用 replace 而不是 href，是为了不让用户再通过“返回”跳回来
-        window.location.replace('index.html'); 
-        return;
-    }
-            await fetchCredits();
             log(`系统就绪。正在加载全局视觉资产及模型配置...`);
+            
             storyboardData = await DB.get('storyboardData') || [];
             extractedData = await DB.get('extractedData') || { characters: [], scenes: [], props: [], effects: [] };
             
@@ -253,10 +183,6 @@ window.onload = async () => {
                 model: selectedLlm,
                 endpoint: selectedLlm.includes('gemini') ? "/api/gemini/chat" : "/api/deepseek/chat"
             };
-
-// 替换原本的 cost 计算和扣费
-if (!(await checkAndDeductCredits('split_script', selectedLlm))) return;
-
             // 🌟 强制保存回全局数据库，把旧的 Gemini 彻底盖掉！
             await DB.set('llm_config', config);
 
@@ -505,18 +431,8 @@ function renderStoryboardUI() {
             document.querySelectorAll('.rich-input').forEach(el => { el.addEventListener('input', handleRichInput); });
         }
 
-// 🌟 将原有的 openGlobalImport 替换为这个异步刷新版
-        async function openGlobalImport(rowId) {
+        function openGlobalImport(rowId) {
             currentImportRowId = rowId;
-            
-            // --- 🌟 核心修复：打开前强制从云端同步最新资产！ ---
-            // 这样就能完美接收到刚从生图控制台存进去的新图片了
-            const latestData = await DB.get('extractedData');
-            if (latestData) {
-                extractedData = latestData;
-            }
-            // ---------------------------------------------------
-
             let pool = [];
             const add = (n,b) => { if(b && !pool.find(x=>x.b64===b)) pool.push({name:n, b64:b}); };
             
@@ -564,15 +480,13 @@ function renderStoryboardUI() {
 
         function updateSbDuration(id, val) { const row = storyboardData.find(x => x.id == id); if(row) row.duration = parseInt(val); }
         
-function uploadSbImg(id) {
-    triggerUpload(async (b64) => {
-        syncRichTextState();
-        log("⏳ 正在同步图片至云盘...");
-        b64 = await window.uploadMediaToCloud(b64, 'png');
-        const row = storyboardData.find(x => x.id == id);
-        if(row) { row.images.push(b64); renderStoryboardUI(); }
-    });
-}
+        function uploadSbImg(id) {
+            triggerUpload((b64) => {
+                syncRichTextState();
+                const row = storyboardData.find(x => x.id == id);
+                if(row) { row.images.push(b64); renderStoryboardUI(); }
+            });
+        }
         
         function removeSbImg(id, imgIdx) {
             syncRichTextState();
@@ -667,11 +581,6 @@ function uploadSbImg(id) {
                 btn.disabled = false;
             }
         } // 🌟 之前就是不小心删掉了这个关键的闭合大括号！
-
-function logout() {
-    localStorage.clear();
-    location.href = '../login.html'; // 🌟 注意这里多了 ../
-}
 
         // ==========================================
         // 🌟 新增：生图独立工作台弹窗控制逻辑
