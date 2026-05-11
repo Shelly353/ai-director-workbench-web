@@ -99,15 +99,22 @@
 
             await loadCredits(user.id);
             
-            // 🌟 1. 返回页面时，先将未保存的分集数据安全封箱推上云端
+            // 数据退回时的清理闭环，这就是触发 app.js:46 日志的原因
             try { 
                 if (typeof DB !== 'undefined' && DB.init) await DB.init();
                 await packCurrentWorkspaceToCloud(); 
             } catch(e) { console.warn("同步环境准备完毕"); }
             
-            // 🌟 2. 强刷云端最新数据，彻底消灭幽灵数据
-            currentView = 'projects';
-            activeProjectId = null;
+            // 🌟 核心改进 1：路由记忆，保证刷新不迷路
+            const lastActiveProj = localStorage.getItem('ai_director_active_project');
+            if (lastActiveProj) {
+                activeProjectId = lastActiveProj;
+                currentView = 'episodes';
+            } else {
+                activeProjectId = null;
+                currentView = 'projects';
+            }
+
             await loadProjects();
         };
 
@@ -126,7 +133,6 @@
             } catch (e) { console.error("积分加载失败"); }
         }
 
-        // 🌟 核心保护：安全解析云端数据，防止字符串引发的覆盖毁灭
         async function loadProjects() {
             const { data, error } = await supabaseClient.rpc('get_my_projects', { my_email: window.currentUserEmail });
             if (error) { console.error("加载项目失败:", error); return; }
@@ -136,8 +142,16 @@
 
             projects = data.map(p => {
                 let safeData = {};
+                let isString = false;
                 if (p.data) {
-                    try { safeData = typeof p.data === 'string' ? JSON.parse(p.data) : p.data; } catch(e) {}
+                    try { 
+                        if (typeof p.data === 'string') {
+                            safeData = JSON.parse(p.data); 
+                            isString = true;
+                        } else {
+                            safeData = p.data;
+                        }
+                    } catch(e) {}
                 }
                 let safeAssets = {};
                 if (p.assets) {
@@ -149,6 +163,7 @@
                     name: p.name, 
                     episodes: Array.isArray(safeData.episodes) ? safeData.episodes : [], 
                     data: safeData,
+                    _isString: isString, // 记录是否为字符串，防止云端覆写出错
                     assets: safeAssets,
                     my_role: p.my_role, 
                     my_status: p.my_status, 
@@ -216,7 +231,6 @@
             else createEpisode();
         }
 
-        // 🌟 必须写云端：新建项目直接推云
         async function createProject() {
             const name = prompt("请输入项目名称:");
             if (name && name.trim()) {
@@ -227,7 +241,7 @@
             }
         }
 
-        // 🌟 必须写云端：新建分集并刷新
+        // 🌟 核心改进 2：光速渲染与数据安全双管齐下
         async function createEpisode() {
             try {
                 const proj = projects.find(p => String(p.id) === String(activeProjectId));
@@ -236,15 +250,29 @@
                 const name = prompt("请输入分集名称:", `第 ${proj.episodes.length + 1} 集`);
                 if (name && name.trim()) {
                     const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
-                    const updatedEpisodes = [...proj.episodes, newEp];
                     
+                    // 1. 光速渲染：立刻强行插入本地并显示，杜绝白屏等待
+                    proj.episodes.push(newEp);
+                    renderView();
+                    
+                    // 2. 格式转换：根据历史云端格式生成写入包
+                    const updatedEpisodes = [...proj.episodes];
+                    let payload = { ...proj.data, episodes: updatedEpisodes };
+                    let finalData = proj._isString ? JSON.stringify(payload) : payload;
+                    
+                    // 3. 异步写入云端
                     const { error } = await supabaseClient
                         .from('shared_projects')
-                        .update({ data: { ...proj.data, episodes: updatedEpisodes } })
+                        .update({ data: finalData })
                         .eq('id', activeProjectId);
 
-                    if (error) throw error;
-                    await loadProjects();
+                    if (error) {
+                        console.error("云端写入出错:", error);
+                        alert("云端同步异常，数据可能未保存成功");
+                    } else {
+                        // 静默刷新底层数据，不阻塞界面操作
+                        loadProjects();
+                    }
                 }
             } catch (e) { alert("创建失败: " + e.message); }
         }
@@ -264,7 +292,9 @@
             const newName = prompt("重命名分集：", ep.name);
             if (newName && newName.trim()) {
                 const updatedEpisodes = proj.episodes.map(e => String(e.id) === String(epId) ? { ...e, name: newName.trim() } : e);
-                await supabaseClient.from('shared_projects').update({ data: { ...proj.data, episodes: updatedEpisodes } }).eq('id', activeProjectId);
+                let payload = { ...proj.data, episodes: updatedEpisodes };
+                let finalData = proj._isString ? JSON.stringify(payload) : payload;
+                await supabaseClient.from('shared_projects').update({ data: finalData }).eq('id', activeProjectId);
                 await loadProjects();
             }
         }
@@ -272,6 +302,8 @@
         async function deleteProject(id) {
             if (confirm("确定要删除吗？这将清除云端所有数据。")) {
                 await supabaseClient.from('shared_projects').delete().eq('id', id);
+                activeProjectId = null;
+                localStorage.removeItem('ai_director_active_project');
                 await loadProjects();
             }
         }
@@ -280,7 +312,9 @@
             if (confirm("确定要删除这个分集及其包含的所有分镜吗？")) {
                 const proj = projects.find(p => String(p.id) === String(activeProjectId));
                 const updatedEpisodes = proj.episodes.filter(e => String(e.id) !== String(epId));
-                await supabaseClient.from('shared_projects').update({ data: { ...proj.data, episodes: updatedEpisodes } }).eq('id', activeProjectId);
+                let payload = { ...proj.data, episodes: updatedEpisodes };
+                let finalData = proj._isString ? JSON.stringify(payload) : payload;
+                await supabaseClient.from('shared_projects').update({ data: finalData }).eq('id', activeProjectId);
                 await loadProjects();
             }
         }
@@ -290,26 +324,23 @@
             await loadProjects();
         }
 
-        // 🌟 终极护盾：退回仪表盘时，安全缝合数据推回云端，保证闭环
         async function packCurrentWorkspaceToCloud() {
             try {
                 const ctx = await DB.get('active_context');
                 if (!ctx || !ctx.projectId || !ctx.epId) return;
 
-                console.log("📥 正在处理退出状态数据同步...");
                 let snapshot = {};
                 for (let key of WORKSPACE_KEYS) {
                     snapshot[key] = await DB.get(key);
                 }
                 
-                // 1. 获取最新鲜的底座
                 const { data: serverProj } = await supabaseClient.from('shared_projects').select('data').eq('id', ctx.projectId).single();
                 
                 if (serverProj) {
-                    // 2. 强安全解析
                     let existingData = {};
+                    let isString = false;
                     if (typeof serverProj.data === 'string') {
-                        try { existingData = JSON.parse(serverProj.data); } catch(e) {}
+                        try { existingData = JSON.parse(serverProj.data); isString = true; } catch(e) {}
                     } else {
                         existingData = serverProj.data || {};
                     }
@@ -319,24 +350,33 @@
                     
                     if (idx !== -1) {
                         eps[idx].data = snapshot;
-                        // 3. 原生覆盖，杜绝遗失
-                        await supabaseClient.from('shared_projects').update({ 
-                            data: { ...existingData, episodes: eps } 
-                        }).eq('id', ctx.projectId);
-                        console.log("✅ 退出快照成功上云！");
+                        let payload = { ...existingData, episodes: eps };
+                        let finalData = isString ? JSON.stringify(payload) : payload;
+                        
+                        await supabaseClient.from('shared_projects').update({ data: finalData }).eq('id', ctx.projectId);
                     }
                 }
             } catch (e) {
                 console.error("数据打包上云失败:", e);
             } finally {
-                // 必须在 finally 里清理，否则报错时会无限重试导致死锁
                 for (let key of WORKSPACE_KEYS) await DB.set(key, null);
                 await DB.set('active_context', null);
             }
         }
 
-        function openProject(id) { activeProjectId = id; currentView = 'episodes'; renderView(); }
-        function backToProjects() { activeProjectId = null; currentView = 'projects'; renderView(); }
+        function openProject(id) { 
+            activeProjectId = id; 
+            currentView = 'episodes'; 
+            localStorage.setItem('ai_director_active_project', id); // 存入本地缓存
+            renderView(); 
+        }
+        
+        function backToProjects() { 
+            activeProjectId = null; 
+            currentView = 'projects'; 
+            localStorage.removeItem('ai_director_active_project'); // 移除缓存
+            renderView(); 
+        }
         
         function openShareModal(id) {
             currentShareProjectId = id;
@@ -356,7 +396,6 @@
             }
         }
 
-        // 🌟 修复关键：进入分集时，确保把云端的 assets（资产）载入给 module1 识别！
         async function enterEpisode(epId) {
             const proj = projects.find(p => String(p.id) === String(activeProjectId));
             const ep = proj.episodes.find(e => String(e.id) === String(epId));
@@ -365,7 +404,6 @@
                 for (let key of Object.keys(ep.data)) await DB.set(key, ep.data[key]);
             }
             
-            // 🚨 非常重要：把提取好的角色场景送到 DB，这样 module1 才能有东西用！
             await DB.set('extractedData', proj.assets || {"characters":[],"scenes":[],"props":[],"effects":[]});
             await DB.set('active_context', { projectId: proj.id, epId: ep.id });
             window.location.href = 'module1.html';
