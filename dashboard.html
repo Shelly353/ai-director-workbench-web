@@ -88,10 +88,16 @@
 
         window.onload = async () => {
             const userId = localStorage.getItem('userId');
-            if (!userId) return window.location.replace('index.html');
+            if (!userId) {
+                window.location.replace('index.html');
+                return;
+            }
 
             const { data: { user } } = await supabaseClient.auth.getUser();
-            if (!user) return window.location.replace('index.html');
+            if (!user) {
+                window.location.replace('index.html');
+                return;
+            }
             
             window.currentUserEmail = user.email;
             document.getElementById('headerUserName').innerText = user.email.split('@')[0];
@@ -99,13 +105,13 @@
 
             await loadCredits(user.id);
             
-            // 数据退回时的清理闭环，这就是触发 app.js:46 日志的原因
             try { 
                 if (typeof DB !== 'undefined' && DB.init) await DB.init();
                 await packCurrentWorkspaceToCloud(); 
-            } catch(e) { console.warn("同步环境准备完毕"); }
+            } catch(e) { 
+                console.warn("同步环境准备完毕"); 
+            }
             
-            // 🌟 核心改进 1：路由记忆，保证刷新不迷路
             const lastActiveProj = localStorage.getItem('ai_director_active_project');
             if (lastActiveProj) {
                 activeProjectId = lastActiveProj;
@@ -119,7 +125,7 @@
         };
 
         async function logout() {
-            if(confirm("确定要退出导演工作台吗？")) {
+            if (confirm("确定要退出导演工作台吗？")) {
                 await supabaseClient.auth.signOut();
                 localStorage.clear();
                 window.location.replace('index.html'); 
@@ -129,13 +135,18 @@
         async function loadCredits(userId) {
             try {
                 const { data } = await supabaseClient.from('profiles').select('credits').eq('user_id', userId).single();
-                if (data) document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits || 0}`;
-            } catch (e) { console.error("积分加载失败"); }
+                if (data) document.getElementById('headerCredit').innerText = "💎 积分: " + (data.credits || 0);
+            } catch (e) { 
+                console.error("积分加载失败"); 
+            }
         }
 
         async function loadProjects() {
             const { data, error } = await supabaseClient.rpc('get_my_projects', { my_email: window.currentUserEmail });
-            if (error) { console.error("加载项目失败:", error); return; }
+            if (error) { 
+                console.error("加载项目失败:", error); 
+                return; 
+            }
 
             const isAdmin = data.some(p => p.my_role === 'owner' || p.my_role === 'admin');
             document.getElementById('adminPanelBtn').style.display = isAdmin ? 'inline-flex' : 'none';
@@ -155,7 +166,9 @@
                 }
                 let safeAssets = {};
                 if (p.assets) {
-                    try { safeAssets = typeof p.assets === 'string' ? JSON.parse(p.assets) : p.assets; } catch(e) {}
+                    try { 
+                        safeAssets = typeof p.assets === 'string' ? JSON.parse(p.assets) : p.assets; 
+                    } catch(e) {}
                 }
                 
                 return {
@@ -163,7 +176,7 @@
                     name: p.name, 
                     episodes: Array.isArray(safeData.episodes) ? safeData.episodes : [], 
                     data: safeData,
-                    _isString: isString, // 记录是否为字符串，防止云端覆写出错
+                    _isString: isString,
                     assets: safeAssets,
                     my_role: p.my_role, 
                     my_status: p.my_status, 
@@ -178,14 +191,15 @@
             const bc = document.getElementById('breadcrumbHeader');
             
             if (currentView === 'projects') {
-                bc.innerHTML = `🏠 工作台`;
+                bc.innerHTML = "🏠 工作台";
                 document.getElementById('topAddBtn').innerText = "+ 新建项目";
             } else {
                 const proj = projects.find(p => String(p.id) === String(activeProjectId));
+                const projName = proj ? proj.name : '项目详情';
                 bc.innerHTML = `
                     <span class="breadcrumb-link" onclick="backToProjects()">🏠 工作台</span>
                     <span class="breadcrumb-separator">/</span>
-                    <span>${proj ? proj.name : '项目详情'}</span>
+                    <span>${projName}</span>
                 `;
                 document.getElementById('topAddBtn').innerText = "+ 新建分集";
             }
@@ -206,29 +220,39 @@
                 }
                 
                 if (item.my_status === 'pending') {
-                    return `<div class="card" style="border:2px solid #ff7875; background:#fff1f0">
+                    return `
+                    <div class="card" style="border:2px solid #ff7875; background:#fff1f0">
                         <div class="card-icon">📩</div>
                         <div class="card-title">${item.name}</div>
                         <button class="btn btn-primary" style="margin-top:10px" onclick="acceptInvite('${item.id}')">接受邀请</button>
                     </div>`;
                 }
 
+                const actionShare = currentView === 'projects' ? `<div class="action-icon" title="协作" onclick="event.stopPropagation(); openShareModal('${item.id}')">👥</div>` : '';
+                const actionRename = `<div class="action-icon" title="重命名" onclick="event.stopPropagation(); ${currentView === 'projects' ? `renameProject('${item.id}')` : `renameEpisode('${item.id}')`}">✏️</div>`;
+                const actionDelete = `<div class="action-icon delete" title="删除" onclick="event.stopPropagation(); ${currentView === 'projects' ? `deleteProject('${item.id}')` : `deleteEpisode('${item.id}')`}">🗑️</div>`;
+                const cardIcon = currentView === 'projects' ? '📁' : '🎬';
+                const clickAction = currentView === 'projects' ? `openProject('${item.id}')` : `enterEpisode('${item.id}')`;
+
                 return `
-                <div class="card" onclick="${currentView === 'projects' ? `openProject('${item.id}')` : `enterEpisode('${item.id}')`}">
+                <div class="card" onclick="${clickAction}">
                     <div class="card-actions">
-                        ${currentView === 'projects' ? `<div class="action-icon" title="协作" onclick="event.stopPropagation(); openShareModal('${item.id}')">👥</div>` : ''}
-                        <div class="action-icon" title="重命名" onclick="event.stopPropagation(); ${currentView === 'projects' ? `renameProject('${item.id}')` : `renameEpisode('${item.id}')`}">✏️</div>
-                        <div class="action-icon delete" title="删除" onclick="event.stopPropagation(); ${currentView === 'projects' ? `deleteProject('${item.id}')` : `deleteEpisode('${item.id}')`}">🗑️</div>
+                        ${actionShare}
+                        ${actionRename}
+                        ${actionDelete}
                     </div>
-                    <div class="card-icon">${currentView === 'projects' ? '📁' : '🎬'}</div>
+                    <div class="card-icon">${cardIcon}</div>
                     <div class="card-title" title="${item.name}">${item.name}</div>
                 </div>`;
             }).join('');
         }
 
         function handleTopAddClick() {
-            if (currentView === 'projects') createProject();
-            else createEpisode();
+            if (currentView === 'projects') {
+                createProject();
+            } else {
+                createEpisode();
+            }
         }
 
         async function createProject() {
@@ -241,47 +265,51 @@
             }
         }
 
-        // 🌟 核心改进 2：光速渲染与数据安全双管齐下
-     async function createEpisode() {
-    // 1. 强制字符串匹配，确保万无一失找到当前项目
-    const proj = projects.find(p => String(p.id) === String(activeProjectId));
-    if (!proj) return alert("项目环境丢失，请刷新");
-
-    const name = prompt("请输入新分集的名称：", `第 ${proj.episodes.length + 1} 集`);
-    if (name && name.trim()) {
-        // 2. 生成新分集并推入本地数组
-        const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
-        proj.episodes.push(newEp);
-
-        // 3. 安全打包：保留原有资产，只更新分集
-        let payload = { ...proj.data, episodes: proj.episodes };
-        let finalData = proj._isString ? JSON.stringify(payload) : payload;
-
-        // 4. 强制推送到 Supabase 云端数据库
-        try {
-            const { error } = await supabaseClient
-                .from('shared_projects')
-                .update({ data: finalData })
-                .eq('id', activeProjectId);
-
-            if (error) {
-                console.error("Supabase 写入报错:", error);
-                alert("云端保存失败，请检查控制台");
-                proj.episodes.pop(); // 失败则撤回本地显示
+        // 🌟 终极防崩溃修复版：避免所有的自动格式化陷阱
+        async function createEpisode() {
+            const proj = projects.find(p => String(p.id) === String(activeProjectId));
+            if (!proj) {
+                alert("项目环境丢失，请刷新");
                 return;
             }
+
+            // 弃用反引号模板字符串，改用最稳定的加号拼接
+            const defaultName = "第 " + (proj.episodes.length + 1) + " 集";
+            const name = prompt("请输入新分集的名称：", defaultName);
             
-            console.log("✅ 分集已成功写入 Supabase 云端！");
+            if (name && name.trim()) {
+                const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
+                
+                // 提前在本地更新
+                proj.episodes.push(newEp);
+                renderView();
 
-            // 5. 核心修复：直接调用云端版的渲染函数，彻底消灭旧版的 saveDB()
-            renderView(); 
+                let payload = { ...proj.data, episodes: proj.episodes };
+                let finalData = proj._isString ? JSON.stringify(payload) : payload;
 
-        } catch (err) {
-            console.error("网络异常:", err);
-            alert("网络异常，保存失败");
+                try {
+                    const { error } = await supabaseClient
+                        .from('shared_projects')
+                        .update({ data: finalData })
+                        .eq('id', activeProjectId);
+
+                    if (error) {
+                        console.error("Supabase 写入报错:", error);
+                        alert("云端保存失败，请检查控制台");
+                        proj.episodes.pop(); 
+                        renderView();
+                        return;
+                    }
+                    
+                    console.log("✅ 分集已成功写入 Supabase 云端！");
+
+                } catch (err) {
+                    console.error("网络异常:", err);
+                    alert("网络异常，保存失败");
+                }
+            }
         }
-    }
-}
+
         async function renameProject(id) {
             const proj = projects.find(p => String(p.id) === String(id));
             const newName = prompt("重命名项目：", proj.name);
@@ -372,21 +400,22 @@
         function openProject(id) { 
             activeProjectId = id; 
             currentView = 'episodes'; 
-            localStorage.setItem('ai_director_active_project', id); // 存入本地缓存
+            localStorage.setItem('ai_director_active_project', id); 
             renderView(); 
         }
         
         function backToProjects() { 
             activeProjectId = null; 
             currentView = 'projects'; 
-            localStorage.removeItem('ai_director_active_project'); // 移除缓存
+            localStorage.removeItem('ai_director_active_project'); 
             renderView(); 
         }
         
         function openShareModal(id) {
             currentShareProjectId = id;
             const proj = projects.find(p => String(p.id) === String(id));
-            document.getElementById('memberList').innerHTML = proj.members.map(m => `<div>${m.email} (${m.role}) - ${m.status}</div>`).join('');
+            const memberHtml = proj.members.map(m => "<div>" + m.email + " (" + m.role + ") - " + m.status + "</div>").join('');
+            document.getElementById('memberList').innerHTML = memberHtml;
             document.getElementById('shareModal').style.display = 'flex';
         }
 
@@ -406,7 +435,9 @@
             const ep = proj.episodes.find(e => String(e.id) === String(epId));
             
             if (ep.data) {
-                for (let key of Object.keys(ep.data)) await DB.set(key, ep.data[key]);
+                for (let key of Object.keys(ep.data)) {
+                    await DB.set(key, ep.data[key]);
+                }
             }
             
             await DB.set('extractedData', proj.assets || {"characters":[],"scenes":[],"props":[],"effects":[]});
