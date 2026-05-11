@@ -181,16 +181,48 @@
             }
         }
 
-        async function createEpisode() {
-            const proj = projects.find(p => p.id === activeProjectId);
-            const name = prompt("请输入分集名称:", `第 ${proj.episodes.length + 1} 集`);
-            if (name) {
-                const newEp = { id: 'ep_' + Date.now(), name, data: {} };
-                const updatedEpisodes = [...proj.episodes, newEp];
-                await supabaseClient.from('shared_projects').update({ data: { episodes: updatedEpisodes } }).eq('id', activeProjectId);
-                await loadProjects();
-            }
+       async function createEpisode() {
+    try {
+        // 1. 获取当前活跃项目对象
+        // 💡 建议：强制转字符串对比，防止 ID 数字/字符串类型不匹配
+        const proj = projects.find(p => String(p.id) === String(activeProjectId));
+        if (!proj) {
+            alert("⚠️ 未找到项目上下文，请刷新页面");
+            return;
         }
+
+        // 2. 弹出命名框
+        const episodes = proj.episodes || [];
+        const name = prompt("请输入分集名称:", `第 ${episodes.length + 1} 集`);
+        
+        if (name && name.trim()) {
+            // 3. 构建新分集对象
+            const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
+            const updatedEpisodes = [...episodes, newEp];
+
+            // 4. 核心安全更新：合并旧 data
+            // 💡 使用 ...proj.data 展开旧资产（角色、场景等），只覆盖 episodes 这一项
+            const { error } = await supabaseClient
+                .from('shared_projects')
+                .update({ 
+                    data: { 
+                        ...proj.data, 
+                        episodes: updatedEpisodes 
+                    } 
+                })
+                .eq('id', activeProjectId);
+
+            if (error) throw error;
+
+            // 5. 刷新界面
+            await loadProjects();
+            console.log("✅ 分集创建成功，资产已合并");
+        }
+    } catch (e) {
+        console.error("分集创建失败:", e);
+        alert("分集创建失败，请检查网络或控制台报错");
+    }
+}
 
         // 🌟 补全：项目与分集的重命名逻辑
         async function renameProject(id) {
