@@ -3,11 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>AI 导演 - 项目工作台</title>
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
     <link rel="stylesheet" href="css/style.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { background: #f4f5f9; margin: 0; padding-bottom: 60px; font-family: system-ui, -apple-system, sans-serif; }
         
@@ -19,9 +15,32 @@
         
         .main-container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
         
-        .grid-container { display: flex !important; flex-wrap: wrap !important; gap: 30px !important; justify-content: flex-start !important; align-items: flex-start !important; }
+        /* 🌟 终极修复：使用强制 Flexbox 流式布局，确保从左到右，排满自动换行 */
+        .grid-container { 
+            display: flex !important; 
+            flex-wrap: wrap !important; 
+            gap: 30px !important; 
+            justify-content: flex-start !important; 
+            align-items: flex-start !important;
+        }
         
-        .card { width: 220px !important; height: 220px !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; background: #fff; border: 1px solid #e5e6eb; border-radius: 14px; cursor: pointer; position: relative; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+        /* 🌟 强制固定每个文件夹的长宽，防止被外链 CSS 挤压变形 */
+        .card { 
+            width: 220px !important; 
+            height: 220px !important; 
+            box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: center !important;
+            background: #fff; 
+            border: 1px solid #e5e6eb; 
+            border-radius: 14px; 
+            cursor: pointer; 
+            position: relative; 
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03); 
+        }
         .card:hover { transform: translateY(-6px); box-shadow: 0 12px 24px rgba(0,0,0,0.08); border-color: var(--primary); }
         
         .card-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; opacity: 0; transition: 0.2s; }
@@ -36,6 +55,7 @@
         .card-title { font-size: 16px; font-weight: 600; color: #1d2129; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; text-align: center;}
         .card-meta { font-size: 12px; color: #86909c; }
         
+        /* 新建按钮卡片样式 */
         .card-add { border: 2px dashed #dcdfe6; background: transparent; box-shadow: none; }
         .card-add:hover { border-color: var(--primary); background: #f8fbff; }
         .card-add .card-icon { color: var(--primary); font-size: 45px; }
@@ -46,26 +66,13 @@
         .page-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
         .page-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #f4f5f9; }
         .page-info { font-size: 14px; color: #86909c; font-weight: bold; }
-
-        /* 🌟 新增：用户状态栏样式 */
-        .user-panel { display: flex; align-items: center; gap: 20px; }
-        .credit-badge { background: #fff5f5; color: #ff6b6b; padding: 6px 14px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 14px; }
-        .logout-btn { color: #86909c; text-decoration: none; font-size: 14px; cursor: pointer; transition: 0.2s; }
-        .logout-btn:hover { color: #f53f3f; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
     <div class="header">
         <div class="breadcrumb" id="breadcrumbHeader"></div>
-        
-        <div class="user-panel">
-            <button id="topAddBtn" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold; cursor: pointer;" onclick="handleTopAddClick()">+ 新建</button>
-            
-            <div style="width: 1px; height: 20px; background: #e5e6eb; margin: 0 5px;"></div> <span class="credit-badge" id="headerCredit">💎 积分: 查询中...</span>
-            <a class="logout-btn" onclick="logout()">退出</a>
-        </div>
+        <button id="topAddBtn" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold; cursor: pointer;" onclick="handleTopAddClick()">+ 新建</button>
     </div>
 
     <div class="main-container">
@@ -80,96 +87,62 @@
 
     <script src="js/app.js"></script>
     <script>
-        // 🌟 初始化 Supabase
-        const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
-        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
         const WORKSPACE_KEYS = ['scriptText', 'scriptSummary', 'storyboardData', 'extractedData', 'globalRatio', 'llmModelSelect', 'llm_config', 'charactersData'];
 
         let projects = [];
         let currentView = 'projects'; 
         let activeProjectId = null;
+        
         let currentPage = 1;
-        const ITEMS_PER_PAGE = 11;
+        const ITEMS_PER_PAGE = 11; // 11个真实文件 + 1个新建按钮 = 满页12个
 
          window.onload = async () => {
-            // 🌟 1. 登录验证（门禁系统）：如果没有 userId，直接踢回登录页！
-            const userId = localStorage.getItem('userId');
-            if (!userId) {
-                alert("未登录或登录已过期，请先登录！");
-                location.href = 'test-login.html';
-                return;
-            }
-
-            // 🌟 2. 去云端获取最新积分并显示
-            fetchCredits(userId);
-
-            // ----- 下面是你原本的逻辑 -----
+            // 1. 在打包清理前，先记录下当前正在编辑的项目 ID
             const activeContext = await DB.get('active_context');
+            
+            // 2. 执行原有的打包收纳逻辑（确保进度已存入分集）
             await packCurrentWorkspace();
+            
+            // 3. 加载项目列表
             projects = await DB.get('all_projects') || [];
             
-            // 🌟 把它注释掉或删掉，不要让它自动跳入分集
-            // if (activeContext && activeContext.projectId) {
-            //     activeProjectId = activeContext.projectId;
-            //     currentView = 'episodes';
-            //     currentPage = 1;
-            // }
-
-            // 🌟 每次进来，强制设置为显示“项目大厅”
-            currentView = 'projects';
-            activeProjectId = null;
+            // 4. 🌟 核心改进：如果刚才有编辑上下文，返回时直接打开该项目的文件夹
+            if (activeContext && activeContext.projectId) {
+                activeProjectId = activeContext.projectId;
+                currentView = 'episodes';
+                currentPage = 1;
+            }
             
             renderView();
         };
 
-        // 🌟 新增：从云端拉取积分
-        async function fetchCredits(userId) {
-            try {
-                const { data, error } = await supabaseClient
-                    .from('profiles')
-                    .select('credits')
-                    .eq('user_id', userId)
-                    .single();
-                
-                if (data) {
-                    document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
-                    localStorage.setItem('userCredits', data.credits); 
-                }
-            } catch (err) {
-                console.error("获取积分失败", err);
-                document.getElementById('headerCredit').innerText = "💎 积分: 获取失败";
-            }
-        }
-
-        // 🌟 新增：退出登录
-function logout() {
-    localStorage.clear(); // 清空所有本地凭证
-    // 🌟 关键修改：使用 replace 替换掉当前历史记录
-    window.location.replace('index.html'); 
-}
-        // ================= 以下全是原有的项目渲染逻辑 =================
         function renderView() {
             updateBreadcrumb();
             const container = document.getElementById('gridContainer');
             const topAddBtn = document.getElementById('topAddBtn');
+            
             let displayList = [];
 
             if (currentView === 'projects') {
                 topAddBtn.innerText = "+ 新建剧本项目";
+                // 将真实项目铺在前面，最后一个塞入一个代表“新建”的虚拟元素
                 displayList = [...projects, { _isAdd: true, _type: 'project' }];
             } else {
                 const proj = projects.find(p => p.id === activeProjectId);
                 if (!proj) return backToProjects();
                 topAddBtn.innerText = "+ 新建分集";
+                // 将真实分集铺在前面，最后一个塞入一个代表“新建”的虚拟元素
                 displayList = [...proj.episodes, { _isAdd: true, _type: 'episode' }];
             }
 
+            // 计算分页
             const totalPages = Math.max(1, Math.ceil(displayList.length / ITEMS_PER_PAGE));
             if (currentPage > totalPages) currentPage = totalPages;
+            
+            // 截取当前页需要显示的数据
             const pagedItems = displayList.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
+            // 渲染 HTML
             container.innerHTML = pagedItems.map((item, idx) => {
                 const globalIdx = (currentPage - 1) * ITEMS_PER_PAGE + idx + 1;
 
@@ -226,6 +199,7 @@ function logout() {
         function updatePagination(totalItems) {
             const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
             const ctrl = document.getElementById('paginationCtrl');
+            
             if (totalPages <= 1) {
                 ctrl.style.display = 'none';
             } else {
@@ -236,11 +210,34 @@ function logout() {
             }
         }
 
-        function changePage(delta) { currentPage += delta; renderView(); }
-        function handleTopAddClick() { if (currentView === 'projects') createProject(); else createEpisode(); }
-        function openProject(id) { activeProjectId = id; currentView = 'episodes'; currentPage = 1; renderView(); }
-        function backToProjects() { activeProjectId = null; currentView = 'projects'; currentPage = 1; renderView(); }
-        async function saveDB() { await DB.set('all_projects', projects); renderView(); }
+        function changePage(delta) {
+            currentPage += delta;
+            renderView();
+        }
+
+        function handleTopAddClick() {
+            if (currentView === 'projects') createProject();
+            else createEpisode();
+        }
+
+        function openProject(id) {
+            activeProjectId = id;
+            currentView = 'episodes';
+            currentPage = 1; 
+            renderView();
+        }
+
+        function backToProjects() {
+            activeProjectId = null;
+            currentView = 'projects';
+            currentPage = 1;
+            renderView();
+        }
+
+        async function saveDB() {
+            await DB.set('all_projects', projects);
+            renderView();
+        }
 
         async function packCurrentWorkspace() {
             const activeContext = await DB.get('active_context');
@@ -277,7 +274,8 @@ function logout() {
             const name = prompt("请输入新项目（剧本）的名称：", "未命名剧本");
             if (name && name.trim()) {
                 projects.push({ id: 'proj_' + Date.now(), name: name.trim(), episodes: [] });
-                currentPage = Math.ceil((projects.length + 1) / ITEMS_PER_PAGE);
+                const totalPages = Math.ceil((projects.length + 1) / ITEMS_PER_PAGE);
+                currentPage = totalPages; // 新建后自动跳到最后一页
                 saveDB();
             }
         }
@@ -288,7 +286,8 @@ function logout() {
                 const name = prompt("请输入新分集的名称：", `第 ${proj.episodes.length + 1} 集`);
                 if (name && name.trim()) {
                     proj.episodes.push({ id: 'ep_' + Date.now(), name: name.trim(), data: {} });
-                    currentPage = Math.ceil((proj.episodes.length + 1) / ITEMS_PER_PAGE);
+                    const totalPages = Math.ceil((proj.episodes.length + 1) / ITEMS_PER_PAGE);
+                    currentPage = totalPages;
                     saveDB();
                 }
             }
@@ -305,7 +304,8 @@ function logout() {
         function deleteProject(id) {
             if (confirm("🚨 警告：这将会永久删除该项目及其下属的所有分集、资产和生成的视频！\n\n确定要彻底删除吗？")) {
                 projects = projects.filter(p => p.id !== id);
-                currentPage = Math.max(1, Math.ceil((projects.length + 1) / ITEMS_PER_PAGE));
+                const maxPage = Math.max(1, Math.ceil((projects.length + 1) / ITEMS_PER_PAGE));
+                if (currentPage > maxPage) currentPage = maxPage;
                 saveDB();
             }
         }
@@ -324,7 +324,8 @@ function logout() {
                 const proj = projects.find(p => p.id === activeProjectId);
                 if (proj) {
                     proj.episodes = proj.episodes.filter(e => e.id !== epId);
-                    currentPage = Math.max(1, Math.ceil((proj.episodes.length + 1) / ITEMS_PER_PAGE));
+                    const maxPage = Math.max(1, Math.ceil((proj.episodes.length + 1) / ITEMS_PER_PAGE));
+                    if (currentPage > maxPage) currentPage = maxPage;
                     saveDB();
                 }
             }

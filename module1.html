@@ -4,32 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 导演工作站 - 步骤1：视觉设定</title>
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
     <link rel="stylesheet" href="css/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-/* 用户状态栏样式 */
-.user-panel { display: flex; align-items: center; gap: 15px;  }
-.header { 
-    padding: 15px 25px; 
-    min-height: 70px; 
-    box-sizing: border-box;
-}
-.credit-badge { 
-    background: #fff5f5; 
-    color: #ff6b6b; 
-    padding: 6px 14px; /* 稍微增加内边距更美观 */
-    border-radius: 20px; 
-    font-weight: bold; 
-    border: 1px solid #ffd8d8; 
-    font-size: 13px; 
-    white-space: nowrap; 
-}
-.logout-btn { color: #86909c; text-decoration: none; font-size: 13px; cursor: pointer; transition: 0.2s; }
-.logout-btn:hover { color: #f53f3f; }
-
         body { padding-bottom: 30px; } 
         .config-bar { background: #fff; padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 15px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.05); flex-wrap: wrap; }
         .config-bar label { font-weight: bold; font-size: 13px; color: var(--text); }
@@ -81,24 +57,19 @@
     </style>
 </head>
 <body>
-<div class="header">
-    <div style="display:flex; align-items:center;">
-        <button class="btn btn-outline" onclick="saveAndBack()" style="margin-right: 20px; padding: 8px 15px; border-color: #e5e6eb;">🏠 返回项目</button>
-        <div class="steps">
-            <div class="step active">1. 剧本设定分析</div>
-            <div class="step">2. 分镜匹配</div>
-            <div class="step">3. 视频生成</div>
+    <div class="header">
+        <div style="display:flex; align-items:center;">
+            <button class="btn btn-outline" onclick="saveAndBack()" style="margin-right: 20px; padding: 8px 15px; border-color: #e5e6eb;">🏠 返回项目</button>
+            
+            <div class="steps">
+                <div class="step active">1. 剧本设定分析</div>
+                <div class="step">2. 分镜匹配</div>
+                <div class="step">3. 视频生成</div>
+            </div>
         </div>
-    </div>
-
-    <div style="display:flex; align-items:center; gap: 20px;">
-        <div class="user-panel" style="margin:0;">
-<span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
-            <a class="logout-btn" onclick="logout()">退出</a>
-        </div>
+        
         <button class="btn btn-primary" onclick="goToNextStep()">下一步 (分镜拆分) ➔</button>
     </div>
-</div>
 
     <div class="config-bar">
         <label>🧠 大语言模型:</label>
@@ -179,54 +150,6 @@
     <script src="js/prompts/effects.js"></script>
 
     <script>
-// ==========================================
-// 🌟 核心：Supabase 数据库连接与通用扣费系统
-// ==========================================
-const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-// 🌟 新增：从云端数据库获取并显示实际积分
-async function fetchCredits() {
-    const userId = localStorage.getItem('userId');
-    if (!userId) return;
-    try {
-        const { data, error } = await supabaseClient
-            .from('profiles')
-            .select('credits')
-            .eq('user_id', userId)
-            .single();
-        if (data) {
-            // 将云端积分渲染到页面右上角
-            document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
-            localStorage.setItem('userCredits', data.credits);
-        }
-    } catch (e) {
-        console.error("获取积分失败:", e);
-    }
-}
-
-// 🌟 统一的服务器端扣费接口
-async function checkAndDeductCredits(actionKey, modelName) {
-    const isGemini = modelName.toLowerCase().includes('gemini');
-    
-    // 直接调用服务器端的 RPC 函数
-    const { data: newCredits, error } = await supabaseClient.rpc('deduct_credits_v2', { 
-        action_key: actionKey, 
-        is_gemini: isGemini 
-    });
-
-    if (error) {
-        alert(`❌ 操作失败：${error.message}`);
-        return false;
-    }
-
-    // 扣费成功，更新 UI 显示
-    document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
-    localStorage.setItem('userCredits', newCredits);
-    log(`💎 服务器已结算：[${actionKey}] 扣费成功，剩余 ${newCredits} 💎。`);
-    return true;
-}
-// ==========================================
 
         const STYLE_MODIFIERS = {
             "realistic": {
@@ -284,16 +207,6 @@ async function checkAndDeductCredits(actionKey, modelName) {
         }
 
         window.onload = async () => {
-    // 🌟 核心安全：检查登录凭证
-    const userId = localStorage.getItem('userId');
-    if (!userId) {
-        // 如果没有找到身份信息，不给任何提示，直接强行踢回登录页
-        // 使用 replace 而不是 href，是为了不让用户再通过“返回”跳回来
-        window.location.replace('index.html'); 
-        return;
-    }
-
-await fetchCredits();
             try {
                 if (typeof DB !== 'undefined' && DB.init) await DB.init();
 
@@ -325,22 +238,7 @@ await fetchCredits();
                 console.warn("读取本地缓存失败", e);
             }
         };
-async function fetchCredits() {
-    const userId = localStorage.getItem('userId');
-    const { data } = await supabaseClient.from('profiles').select('credits').eq('user_id', userId).single();
-    if (data) {
-        document.getElementById('headerCredit').innerText = `💎 ${data.credits}`;
-    }
-}
 
-function logout() {
-    localStorage.clear();
-    location.href = 'login.html';
-}
-
-// 🚨 记得更新你之前的 checkAndDeductCredits 函数，扣费成功后刷新显示：
-// 在 checkAndDeductCredits 成功的最后加一句：
-// document.getElementById('headerCredit').innerText = `💎 ${newCredits}`;
         async function validateExtractBtn() {
             const style = document.getElementById('styleSelect').value;
             const ratio = document.getElementById('ratioSelect').value;
@@ -403,9 +301,6 @@ function logout() {
             const styleKey = document.getElementById('styleSelect').value;
             const styleName = (styleKey && STYLE_MODIFIERS[styleKey]) ? STYLE_MODIFIERS[styleKey].name : "默认风格";
             const selectedModel = document.getElementById('llmModelSelect').value || "deepseek-chat";
-
-          // 替换原本的 cost 计算和扣费
-if (!(await checkAndDeductCredits('extract_elements', selectedModel))) return;
 
             log(`🚀 正在调用 [${selectedModel}] 发起剧本分析...`);
 
@@ -610,43 +505,60 @@ if (!(await checkAndDeductCredits('extract_elements', selectedModel))) return;
             saveCurrentState(); renderAssetsUI(); closeImageModal();
         }
 
-       function uploadAssetResult(cat, idx, type) {
-    triggerUpload(async (b64) => {
-        log("⏳ 正在同步图片至云端...");
-        // 🌟 拦截 Base64 转为云端链接
-        b64 = await window.uploadMediaToCloud(b64, 'png');
-        if (cat === 'scenes') {
-            if (type === 'forward') extractedData.scenes[idx].forwardImg = b64;
-            else extractedData.scenes[idx].reverseImg = b64;
-        } else extractedData[cat][idx].img = b64;
-        renderAssetsUI(); 
-        log("✅ 替换图片已存入云端！");
-    });
-}
+        function uploadAssetResult(cat, idx, type) {
+            triggerUpload((b64) => {
+                if (cat === 'scenes') {
+                    if (type === 'forward') extractedData.scenes[idx].forwardImg = b64;
+                    else extractedData.scenes[idx].reverseImg = b64;
+                } else extractedData[cat][idx].img = b64;
+                renderAssetsUI(); 
+            });
+        }
+
         function triggerMultiUpload(cat, idx) { currentUploadTarget = { cat, idx }; document.getElementById('multiUploader').click(); }
         document.getElementById('multiUploader').onchange = async function(e) {
-    const files = Array.from(e.target.files);
-    if(!files.length) return;
-    
-    log(`⏳ 正在上传 ${files.length} 张本地图片到云端...`);
-    for (let file of files) {
-        try {
-            // 🌟 直接调用云盘引擎
-            const cloudUrl = await window.uploadMediaToCloud(file);
-            if (cloudUrl) {
-                const {cat, idx} = currentUploadTarget;
-                if(!extractedData[cat][idx].refImages) extractedData[cat][idx].refImages = [];
-                extractedData[cat][idx].refImages.push(cloudUrl);
-                log(`✅ 成功存入云盘：${cloudUrl}`);
-            }
-        } catch (err) {
-            log(`❌ 上传异常: ${err.message}`);
-        }
-    }
-    renderAssetsUI();
-    this.value = ""; 
-};
+            const files = Array.from(e.target.files);
+            if(!files.length) return;
+            
+            // 显示上传中的状态提示
+            log(`⏳ 正在上传 ${files.length} 张本地图片到服务器...`);
+            
+            for (let file of files) {
+                const formData = new FormData();
+                formData.append('file', file);
 
+                try {
+                    // 假设您的 apiRequest 是在 app.js 里封装的，这里直接使用原生的 fetch 向后端的 /api/upload 发送文件
+                    const res = await fetch('/api/upload', {
+                        method: 'POST',
+                    headers: {
+                            // 🌟 动态获取，没有就弹窗，有就直接用
+                            'x-access-code': getAccessCode() 
+                        },
+                        body: formData
+                    });
+                    
+                    const data = await res.json();
+                    
+                    if (data.url) {
+                        const {cat, idx} = currentUploadTarget;
+                        if(!extractedData[cat][idx].refImages) extractedData[cat][idx].refImages = [];
+                        
+                        // 🌟 核心：存入的是真正的 http://... 网址，而不是 Base64！
+                        extractedData[cat][idx].refImages.push(data.url);
+                        log(`✅ 成功上传本地图片并转为真实链接。`);
+                    } else {
+                        log(`❌ 图片上传失败: ${data.error}`);
+                    }
+                } catch (err) {
+                    console.error("上传异常", err);
+                    log(`❌ 上传发生异常: ${err.message}`);
+                }
+            }
+            // 所有图片上传并拿到 URL 后，重新渲染页面
+            renderAssetsUI();
+            this.value = ""; // 清空 input
+        };
         function showMentionMenu(range, images) {
             const rect = range.getBoundingClientRect();
             const menu = document.getElementById('mentionMenu');
@@ -697,9 +609,6 @@ if (!(await checkAndDeductCredits('extract_elements', selectedModel))) return;
                 const styleName = (styleKey && STYLE_MODIFIERS[styleKey]) ? STYLE_MODIFIERS[styleKey].name : "默认风格";
                 const currentLLM = document.getElementById('llmModelSelect').value || "deepseek-chat";
                 const name = extractedData[cat][idx].name;
-
-// 替换原本的 cost 计算和扣费
-if (!(await checkAndDeductCredits('ai_thought', currentLLM))) return;
 
                 inputEl.innerText = "🤖 思考中...";
                 let endpoint = currentLLM.startsWith('gemini') ? '/api/gemini/chat' : '/api/deepseek/chat';
@@ -775,10 +684,6 @@ async function genAssetImage(cat, idx, type) {
             if (cat === 'scenes' && type === 'reverse' && extractedData.scenes[idx].forwardImg) inlineImgs = [extractedData.scenes[idx].forwardImg];
 
             const fullPrompt = `${stylePrefix}${template.prefix || ""}${rawText}${template.suffix || ""}`;
-            
-// 替换原本的 cost 计算和扣费
-if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
-
             log(`📝 提交生图指令: ${fullPrompt}`);
             if (imgBox) imgBox.innerHTML = `<span>🎨 正在生图...</span>`;
 
@@ -819,11 +724,14 @@ if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
                     while (true) {
                         await new Promise(resolve => setTimeout(resolve, 3500));
 // 🌟 核心修复：必须强行加上您的 Render 服务器前缀！
-const renderBaseURL = "https://proxy-server-web.onrender.com"; 
+const renderBaseURL = "https://proxy-server-us-it0u.onrender.com"; 
 
 const pollRes = await fetch(`${renderBaseURL}/api/dashscope/poll/${res.taskId}`, {
     method: 'GET',
-
+    headers: { 
+        // 🌟 统一使用动态获取函数，没有暗号时会自动弹窗提示输入
+        'x-access-code': getAccessCode() 
+    }
 });                 
                         if (!pollRes.ok) throw new Error(`轮询请求失败 HTTP ${pollRes.status}`);
                         const pollData = await pollRes.json();
@@ -888,9 +796,7 @@ if (taskStatus === 'SUCCEEDED') {
                         }
                     }
                 }
-// 👇 修正位置：在这里将生成的 Base64 永久存入云端
-                if (imgBox) imgBox.innerHTML = `<span>☁️ 正在保存至云端...</span>`;
-                b64 = await window.uploadMediaToCloud(b64, 'png');
+
                 if (cat === 'scenes') {
                     if (type === 'forward') extractedData.scenes[idx].forwardImg = b64; 
                     else extractedData.scenes[idx].reverseImg = b64; 
