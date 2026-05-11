@@ -25,13 +25,20 @@
         .action-icon:hover { background: #e8f3ff; color: var(--primary); }
         .action-icon.delete:hover { background: #ffece8; color: #f53f3f; }
         .card-icon { font-size: 60px; margin-bottom: 18px; line-height: 1; transition: transform 0.2s; }
-        .card:hover .card-icon { transform: scale(1.08); }
         .card-title { font-size: 16px; font-weight: 600; color: #1d2129; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; text-align: center;}
         .card-add { border: 2px dashed #dcdfe6 !important; background: transparent !important; box-shadow: none !important; }
         .card-add:hover { border-color: var(--primary) !important; background: #f8fbff !important; }
         .card-add .card-icon { color: var(--primary); font-size: 45px; margin-bottom: 10px; }
         .card-add .card-title { color: var(--primary); margin: 0; }
         .credit-badge { background: #fff5f5; color: #ff6b6b; padding: 6px 14px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 14px; }
+        
+        /* 新增：用户信息面板样式 */
+        .user-profile { display: flex; align-items: center; gap: 10px; margin-left: 15px; padding-left: 15px; border-left: 1px solid #e5e6eb; }
+        .user-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 16px; text-transform: uppercase; }
+        .user-details { display: flex; flex-direction: column; }
+        .user-name { font-size: 13px; color: #1d2129; font-weight: 600; line-height: 1.2; }
+        .logout-btn { font-size: 11px; color: #86909c; cursor: pointer; text-align: left; background: none; border: none; padding: 0; margin-top: 2px; }
+        .logout-btn:hover { color: #f53f3f; text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -42,6 +49,14 @@
             <button id="adminPanelBtn" class="btn btn-outline" style="display:none; border-color:#722ed1; color:#722ed1;" onclick="location.href='admin/admin_panel.html'">📊 管理面板</button>
             <button id="topAddBtn" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold;" onclick="handleTopAddClick()">+ 新建</button>
             <span id="headerCredit" class="credit-badge">💎 积分: ...</span>
+            
+            <div class="user-profile">
+                <div class="user-avatar" id="userAvatar">U</div>
+                <div class="user-details">
+                    <span class="user-name" id="headerUserName">加载中...</span>
+                    <button class="logout-btn" onclick="logout()">退出登录</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -77,13 +92,27 @@
 
         window.onload = async () => {
             const { data: { user } } = await supabaseClient.auth.getUser();
+            // 如果未登录，回退到首页或登录页（根据您的实际情况修改 index.html）
             if (!user) return location.replace('index.html');
             window.currentUserEmail = user.email;
+
+            // 🌟 填充用户账号信息
+            const username = user.email.split('@')[0];
+            document.getElementById('headerUserName').innerText = username;
+            document.getElementById('userAvatar').innerText = username.charAt(0);
 
             await loadCredits();
             try { if (typeof DB !== 'undefined') await packCurrentWorkspaceToCloud(); } catch(e) { console.warn("Pack 失败:", e); }
             await loadProjects();
         };
+
+        // 🌟 新增：安全登出函数
+        async function logout() {
+            if(confirm("确定要退出导演工作台吗？")) {
+                await supabaseClient.auth.signOut();
+                window.location.replace('index.html'); // 退出后跳转回登录页面
+            }
+        }
 
         async function loadCredits() {
             try {
@@ -103,7 +132,7 @@
                 id: p.id, 
                 name: p.name, 
                 episodes: (p.data && p.data.episodes) ? p.data.episodes : [], 
-                assets: p.assets || {"characters":[],"scenes":[],"props":[],"effects":[]}, // 提取资产库
+                assets: p.assets || {"characters":[],"scenes":[],"props":[],"effects":[]}, 
                 my_role: p.my_role, 
                 my_status: p.my_status, 
                 members: p.members || []
@@ -152,7 +181,6 @@
                     </div>`;
                 }
 
-                // 🌟 核心补全：增加了 ✏️ 重命名按钮，并对齐事件绑定
                 return `
                 <div class="card" onclick="${currentView === 'projects' ? `openProject('${item.id}')` : `enterEpisode('${item.id}')`}">
                     <div class="card-actions">
@@ -181,60 +209,51 @@
             }
         }
 
-    async function createEpisode() {
-    try {
-        // 1. 定位当前项目索引
-        const projIndex = projects.findIndex(p => String(p.id) === String(activeProjectId));
-        if (projIndex === -1) {
-            alert("未找到项目环境，请刷新页面！");
-            return;
-        }
-        
-        const proj = projects[projIndex];
-        const name = prompt("请输入分集名称:", `第 ${proj.episodes.length + 1} 集`);
-        
-        if (name && name.trim()) {
-            // 生成新分集对象
-            const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
-            
-            // 🌟 核心修复 1：【光速显示】先将分集塞入本地数组，并立刻刷新页面视图！
-            proj.episodes.push(newEp);
-            renderView(); // 页面瞬间出现新分集，无需等待网络
-            
-            // 🌟 核心修复 2：去云端拉取最新完整的“家底”，防止覆盖掉角色的核心资产
-            const { data: serverProj, error: fetchErr } = await supabaseClient
-                .from('shared_projects')
-                .select('data')
-                .eq('id', activeProjectId)
-                .single();
-            
-            if (fetchErr) throw fetchErr;
-            
-            const existingData = (serverProj && serverProj.data) ? serverProj.data : {};
-            const updatedEpisodes = [...(existingData.episodes || []), newEp];
-            
-            // 🌟 核心修复 3：安全、静默地更新到云端
-            const { error: updateErr } = await supabaseClient
-                .from('shared_projects')
-                .update({ 
-                    data: { ...existingData, episodes: updatedEpisodes } 
-                })
-                .eq('id', activeProjectId);
+        async function createEpisode() {
+            try {
+                const projIndex = projects.findIndex(p => String(p.id) === String(activeProjectId));
+                if (projIndex === -1) {
+                    alert("未找到项目环境，请刷新页面！");
+                    return;
+                }
+                
+                const proj = projects[projIndex];
+                const name = prompt("请输入分集名称:", `第 ${proj.episodes.length + 1} 集`);
+                
+                if (name && name.trim()) {
+                    const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
+                    
+                    proj.episodes.push(newEp);
+                    renderView(); 
+                    
+                    const { data: serverProj, error: fetchErr } = await supabaseClient
+                        .from('shared_projects')
+                        .select('data')
+                        .eq('id', activeProjectId)
+                        .single();
+                    
+                    if (fetchErr) throw fetchErr;
+                    
+                    const existingData = (serverProj && serverProj.data) ? serverProj.data : {};
+                    const updatedEpisodes = [...(existingData.episodes || []), newEp];
+                    
+                    const { error: updateErr } = await supabaseClient
+                        .from('shared_projects')
+                        .update({ 
+                            data: { ...existingData, episodes: updatedEpisodes } 
+                        })
+                        .eq('id', activeProjectId);
 
-            if (updateErr) throw updateErr;
-            
-            console.log("✅ 分集已成功同步到云端");
+                    if (updateErr) throw updateErr;
+                }
+            } catch (e) {
+                console.error("创建分集错误:", e.message);
+                await loadProjects(); 
+                openProject(activeProjectId);
+                alert("操作失败: " + e.message);
+            }
         }
-    } catch (e) {
-        console.error("创建分集错误:", e.message);
-        // 如果中间发生网络错误，重新从云端拉取真实数据纠正页面
-        await loadProjects(); 
-        openProject(activeProjectId);
-        alert("操作失败: " + e.message);
-    }
-}
 
-        // 🌟 补全：项目与分集的重命名逻辑
         async function renameProject(id) {
             const proj = projects.find(p => p.id === id);
             const newName = prompt("重命名项目：", proj.name);
@@ -262,7 +281,6 @@
             }
         }
 
-        // 🌟 补全：删除分集逻辑
         async function deleteEpisode(epId) {
             if (confirm("确定要删除这个分集及其包含的所有分镜吗？")) {
                 const proj = projects.find(p => p.id === activeProjectId);
@@ -277,20 +295,38 @@
             await loadProjects();
         }
 
+        // 🌟 核心修复：数据退回时不覆盖、不丢失
         async function packCurrentWorkspaceToCloud() {
             const ctx = await DB.get('active_context');
             if (ctx && ctx.projectId) {
                 let snapshot = {};
-                for (let key of WORKSPACE_KEYS) snapshot[key] = await DB.get(key);
-                const { data: proj } = await supabaseClient.from('shared_projects').select('data').eq('id', ctx.projectId).single();
-                if (proj) {
-                    let eps = proj.data.episodes || [];
+                for (let key of WORKSPACE_KEYS) {
+                    snapshot[key] = await DB.get(key);
+                }
+                
+                // 从云端拉取最实时的工程底座数据
+                const { data: serverProj } = await supabaseClient
+                    .from('shared_projects')
+                    .select('data')
+                    .eq('id', ctx.projectId)
+                    .single();
+                
+                if (serverProj) {
+                    const existingData = serverProj.data || {};
+                    let eps = existingData.episodes || [];
                     const idx = eps.findIndex(e => e.id === ctx.epId);
+                    
                     if (idx !== -1) {
                         eps[idx].data = snapshot;
-                        await supabaseClient.from('shared_projects').update({ data: { episodes: eps } }).eq('id', ctx.projectId);
+                        
+                        // 保护机制：使用 ...existingData 展开，绝不清除其它核心资产
+                        await supabaseClient.from('shared_projects').update({ 
+                            data: { ...existingData, episodes: eps } 
+                        }).eq('id', ctx.projectId);
                     }
                 }
+                
+                // 清理本地上下文
                 for (let key of WORKSPACE_KEYS) await DB.set(key, null);
                 await DB.set('active_context', null);
             }
@@ -310,10 +346,10 @@
             const email = document.getElementById('inviteEmail').value;
             try {
                 await apiRequest('/api/project/invite', { projectId: currentShareProjectId, projectName: "剧本项目", inviteeEmail: email, role: 'member' });
-                alert("邀请已发送");
+                alert("邀请操作已完成");
                 document.getElementById('shareModal').style.display = 'none';
             } catch (e) {
-                alert("邀请发送失败：" + e.message);
+                alert("操作失败：" + e.message);
             }
         }
 
@@ -324,7 +360,6 @@
                 for (let key of Object.keys(ep.data)) await DB.set(key, ep.data[key]);
             }
             
-            // 🌟 核心改进闭环：将该项目的独立资产库（Assets）同步加载至本地环境供 module1 使用
             await DB.set('extractedData', proj.assets || {"characters":[],"scenes":[],"props":[],"effects":[]});
             await DB.set('active_context', { projectId: proj.id, epId: ep.id });
             window.location.href = 'module1.html';
