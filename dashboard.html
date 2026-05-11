@@ -1,54 +1,4 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <title>AI 导演 - 项目工作台</title>
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <link rel="stylesheet" href="css/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        body { background: #f4f5f9; margin: 0; padding-bottom: 60px; font-family: system-ui, sans-serif; }
-        .header { position: sticky; top: 0; z-index: 1000; background: #fff; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e6eb; }
-        .grid-container { display: flex !important; flex-wrap: wrap !important; gap: 30px !important; padding: 20px; }
-        .card { width: 220px; height: 220px; background: #fff; border: 1px solid #e5e6eb; border-radius: 14px; cursor: pointer; position: relative; transition: 0.2s; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        .card:hover { transform: translateY(-5px); border-color: var(--primary); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
-        .card-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; opacity: 0; }
-        .card:hover .card-actions { opacity: 1; }
-        .action-icon { width: 28px; height: 28px; border-radius: 50%; background: #f4f5f9; display: flex; justify-content: center; align-items: center; font-size: 13px; color: #86909c; }
-        .card-title { font-size: 16px; font-weight: 600; margin-top: 12px; text-align: center; width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    </style>
-</head>
-<body>
-
-    <div class="header">
-        <div id="breadcrumbHeader" style="font-size: 18px; font-weight: bold;">🏠 工作台</div>
-        <div style="display:flex; gap:15px; align-items:center;">
-            <button id="adminPanelBtn" class="btn btn-outline" style="display:none; border-color:#722ed1; color:#722ed1;" onclick="location.href='admin/admin_panel.html'">📊 管理面板</button>
-            <button id="topAddBtn" class="btn btn-primary" onclick="handleTopAddClick()">+ 新建</button>
-            <span id="headerCredit" style="font-weight:bold; color:#ff6b6b;">💎 积分: ...</span>
-        </div>
-    </div>
-
-    <div class="main-container">
-        <div class="grid-container" id="gridContainer"></div>
-    </div>
-
-    <div id="shareModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
-        <div style="background:#fff; width:450px; border-radius:12px; padding:25px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
-                <h3 style="margin:0;">👥 剧组成员协作</h3>
-                <span style="cursor:pointer; font-size:24px;" onclick="document.getElementById('shareModal').style.display='none'">×</span>
-            </div>
-            <div style="display:flex; gap:10px; margin-bottom:15px;">
-                <input type="email" id="inviteEmail" placeholder="输入成员邮箱..." style="flex:1; padding:8px; border:1px solid #ccc; border-radius:4px;">
-                <button class="btn btn-primary" onclick="inviteMember()">邀请</button>
-            </div>
-            <div id="memberList" style="max-height:150px; overflow-y:auto; font-size:12px; border-top:1px solid #eee; padding-top:10px;"></div>
-        </div>
-    </div>
-
-    <script src="js/app.js"></script>
-    <script>
+<script>
         const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -64,15 +14,26 @@
             if (!user) return location.replace('index.html');
             window.currentUserEmail = user.email;
 
-            // 🌟 解决返回空白：尝试同步进度（加了容错，防止 DB 崩溃导致后面不运行）
-            try { await packCurrentWorkspaceToCloud(); } catch(e) { console.warn("同步本地进度跳过:", e); }
+            // 1. 🌟 补全：拉取积分并显示
+            await loadCredits();
+
+            // 2. 🌟 补全：尝试同步进度（带容错，防止 DB 变量未定义导致崩溃）
+            try { if (typeof DB !== 'undefined') await packCurrentWorkspaceToCloud(); } catch(e) { console.warn("Pack 失败:", e); }
             
             await loadProjects();
         };
 
+        // 🌟 补全：加载积分逻辑
+        async function loadCredits() {
+            try {
+                const { data, error } = await supabaseClient.from('profiles').select('credits').eq('user_id', (await supabaseClient.auth.getUser()).data.user.id).single();
+                if (data) document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits || 0}`;
+            } catch (e) { console.error("积分加载失败"); }
+        }
+
         async function loadProjects() {
             const { data, error } = await supabaseClient.rpc('get_my_projects', { my_email: window.currentUserEmail });
-            if (error) { console.error(error); return; }
+            if (error) { console.error("RPC 加载失败，请确认 SQL 是否运行:", error); return; }
 
             const isAdmin = data.some(p => p.my_role === 'owner' || p.my_role === 'admin');
             document.getElementById('adminPanelBtn').style.display = isAdmin ? 'inline-flex' : 'none';
@@ -88,12 +49,16 @@
             const bc = document.getElementById('breadcrumbHeader');
             bc.innerHTML = currentView === 'projects' ? `🏠 工作台` : `<span style="cursor:pointer;color:#86909c" onclick="backToProjects()">🏠 工作台</span> / 项目详情`;
             
-            let list = currentView === 'projects' ? 
-                [...projects, { _isAdd: true, _type: 'project' }] : 
-                [...(projects.find(p => p.id === activeProjectId)?.episodes || []), { _isAdd: true, _type: 'episode' }];
+            let list = [];
+            if (currentView === 'projects') {
+                list = [...projects, { _isAdd: true, _type: 'project' }];
+            } else {
+                const proj = projects.find(p => p.id === activeProjectId);
+                list = [...(proj ? proj.episodes : []), { _isAdd: true, _type: 'episode' }];
+            }
 
             container.innerHTML = list.map(item => {
-                if (item._isAdd) return `<div class="card" style="border:2px dashed #ccc" onclick="${item._type === 'project' ? 'createProject()' : 'createEpisode()'}">➕ 新建</div>`;
+                if (item._isAdd) return `<div class="card" style="border:2px dashed #ccc" onclick="${item._type === 'project' ? 'createProject()' : 'createEpisode()'}">➕ 新建${item._type === 'project'?'项目':'分集'}</div>`;
                 
                 if (item.my_status === 'pending') {
                     return `<div class="card" style="border:2px solid #ff7875; background:#fff1f0">
@@ -114,35 +79,93 @@
             }).join('');
         }
 
+        // 🌟 补全：新建按钮总控
+        function handleTopAddClick() {
+            if (currentView === 'projects') createProject();
+            else createEpisode();
+        }
+
         async function createProject() {
-            const name = prompt("项目名称:");
+            const name = prompt("请输入项目名称:");
             if (name) {
                 const id = 'proj_' + Date.now();
-                // 1. 创建项目
                 await supabaseClient.from('shared_projects').insert([{ id, name, owner_email: window.currentUserEmail }]);
-                // 2. 绑定自己为 Owner
                 await supabaseClient.from('project_members').insert([{ project_id: id, user_email: window.currentUserEmail, role: 'owner', status: 'active' }]);
                 await loadProjects();
             }
         }
 
-        // ... openProject, backToProjects, inviteMember, acceptInvite 等函数逻辑补全 ...
+        // 🌟 补全：新建分集逻辑
+        async function createEpisode() {
+            const proj = projects.find(p => p.id === activeProjectId);
+            const name = prompt("请输入分集名称:", `第 ${proj.episodes.length + 1} 集`);
+            if (name) {
+                const newEp = { id: 'ep_' + Date.now(), name, data: {} };
+                const updatedEpisodes = [...proj.episodes, newEp];
+                await supabaseClient.from('shared_projects').update({ data: { episodes: updatedEpisodes } }).eq('id', activeProjectId);
+                await loadProjects();
+            }
+        }
+
+        // 🌟 补全：删除逻辑
+        async function deleteProject(id) {
+            if (confirm("确定要删除吗？这将清除云端所有数据。")) {
+                await supabaseClient.from('shared_projects').delete().eq('id', id);
+                await loadProjects();
+            }
+        }
+
+        // 🌟 补全：接受邀请逻辑
+        async function acceptInvite(id) {
+            await supabaseClient.rpc('accept_project_invitation', { p_id: id, p_email: window.currentUserEmail });
+            await loadProjects();
+        }
+
+        // 🌟 补全：打包同步逻辑
+        async function packCurrentWorkspaceToCloud() {
+            const ctx = await DB.get('active_context');
+            if (ctx && ctx.projectId) {
+                let snapshot = {};
+                for (let key of WORKSPACE_KEYS) snapshot[key] = await DB.get(key);
+                const { data: proj } = await supabaseClient.from('shared_projects').select('data').eq('id', ctx.projectId).single();
+                if (proj) {
+                    let eps = proj.data.episodes || [];
+                    const idx = eps.findIndex(e => e.id === ctx.epId);
+                    if (idx !== -1) {
+                        eps[idx].data = snapshot;
+                        await supabaseClient.from('shared_projects').update({ data: { episodes: eps } }).eq('id', ctx.projectId);
+                    }
+                }
+                for (let key of WORKSPACE_KEYS) await DB.set(key, null);
+                await DB.set('active_context', null);
+            }
+        }
+
         function openProject(id) { activeProjectId = id; currentView = 'episodes'; renderView(); }
         function backToProjects() { activeProjectId = null; currentView = 'projects'; renderView(); }
         
         function openShareModal(id) {
             currentShareProjectId = id;
             const proj = projects.find(p => p.id === id);
-            document.getElementById('memberList').innerHTML = proj.members.map(m => `<div>${m.email} (${m.role})</div>`).join('');
+            document.getElementById('memberList').innerHTML = proj.members.map(m => `<div>${m.email} (${m.role}) - ${m.status}</div>`).join('');
             document.getElementById('shareModal').style.display = 'flex';
         }
 
         async function inviteMember() {
             const email = document.getElementById('inviteEmail').value;
-            await apiRequest('/api/project/invite', { projectId: currentShareProjectId, projectName: "新剧本", inviteeEmail: email, role: 'member' });
+            // 注意：apiRequest 需要在您的 app.js 中定义好
+            await apiRequest('/api/project/invite', { projectId: currentShareProjectId, projectName: "剧本项目", inviteeEmail: email, role: 'member' });
             alert("邀请已发送");
             document.getElementById('shareModal').style.display = 'none';
         }
+
+        async function enterEpisode(epId) {
+            const proj = projects.find(p => p.id === activeProjectId);
+            const ep = proj.episodes.find(e => e.id === epId);
+            if (ep.data) {
+                for (let key of Object.keys(ep.data)) await DB.set(key, ep.data[key]);
+            }
+            await DB.set('active_context', { projectId: proj.id, epId: ep.id });
+            window.location.href = 'module1.html';
+        }
     </script>
-</body>
-</html>
