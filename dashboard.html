@@ -183,38 +183,53 @@
 
     async function createEpisode() {
     try {
-        // 1. 强制转字符串对比，防止 ID 匹配失败导致没反应
-        const proj = projects.find(p => String(p.id) === String(activeProjectId));
-        if (!proj) {
+        // 1. 定位当前项目索引
+        const projIndex = projects.findIndex(p => String(p.id) === String(activeProjectId));
+        if (projIndex === -1) {
             alert("未找到项目环境，请刷新页面！");
             return;
         }
-
-        const currentEpisodes = proj.episodes || [];
-        const name = prompt("请输入分集名称:", `第 ${currentEpisodes.length + 1} 集`);
+        
+        const proj = projects[projIndex];
+        const name = prompt("请输入分集名称:", `第 ${proj.episodes.length + 1} 集`);
         
         if (name && name.trim()) {
+            // 生成新分集对象
             const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
-            const updatedEpisodes = [...currentEpisodes, newEp];
             
-            // 2. 将新分集更新到 Supabase 云端
-            const { error } = await supabaseClient
+            // 🌟 核心修复 1：【光速显示】先将分集塞入本地数组，并立刻刷新页面视图！
+            proj.episodes.push(newEp);
+            renderView(); // 页面瞬间出现新分集，无需等待网络
+            
+            // 🌟 核心修复 2：去云端拉取最新完整的“家底”，防止覆盖掉角色的核心资产
+            const { data: serverProj, error: fetchErr } = await supabaseClient
+                .from('shared_projects')
+                .select('data')
+                .eq('id', activeProjectId)
+                .single();
+            
+            if (fetchErr) throw fetchErr;
+            
+            const existingData = (serverProj && serverProj.data) ? serverProj.data : {};
+            const updatedEpisodes = [...(existingData.episodes || []), newEp];
+            
+            // 🌟 核心修复 3：安全、静默地更新到云端
+            const { error: updateErr } = await supabaseClient
                 .from('shared_projects')
                 .update({ 
-                    data: { ...proj.data, episodes: updatedEpisodes } 
+                    data: { ...existingData, episodes: updatedEpisodes } 
                 })
                 .eq('id', activeProjectId);
 
-            if (error) throw error;
+            if (updateErr) throw updateErr;
             
-            // 3. 核心修复：重新拉取数据，并刷新当前页面视图！
-            await loadProjects(); 
-            openProject(activeProjectId); // 强制重新渲染分集列表，解决“创建成功但不显示”
-            
-            console.log("✅ 分集创建并显示成功");
+            console.log("✅ 分集已成功同步到云端");
         }
     } catch (e) {
         console.error("创建分集错误:", e.message);
+        // 如果中间发生网络错误，重新从云端拉取真实数据纠正页面
+        await loadProjects(); 
+        openProject(activeProjectId);
         alert("操作失败: " + e.message);
     }
 }
