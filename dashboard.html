@@ -37,7 +37,7 @@
 <body>
 
     <div class="header">
-        <div class="breadcrumb" id="breadcrumbHeader">🏠 工作台</div>
+        <div class="breadcrumb" id="breadcrumbHeader"></div>
         <div style="display:flex; gap:15px; align-items:center;">
             <button id="adminPanelBtn" class="btn btn-outline" style="display:none; border-color:#722ed1; color:#722ed1;" onclick="location.href='admin/admin_panel.html'">📊 管理面板</button>
             <button id="topAddBtn" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold;" onclick="handleTopAddClick()">+ 新建</button>
@@ -46,8 +46,7 @@
     </div>
 
     <div class="main-container">
-        <div id="loadingTips" style="text-align:center; padding: 50px; color: #86909c;">正在连接云端数据库，请稍候...</div>
-        <div class="grid-container" id="gridContainer" style="display:none;"></div>
+        <div class="grid-container" id="gridContainer"></div>
     </div>
 
     <div id="shareModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
@@ -82,31 +81,20 @@
             window.currentUserEmail = user.email;
 
             await loadCredits();
-
             try { if (typeof DB !== 'undefined') await packCurrentWorkspaceToCloud(); } catch(e) { console.warn("Pack 失败:", e); }
-            
             await loadProjects();
         };
 
         async function loadCredits() {
             try {
-                const { data, error } = await supabaseClient.from('profiles').select('credits').eq('user_id', (await supabaseClient.auth.getUser()).data.user.id).single();
+                const { data } = await supabaseClient.from('profiles').select('credits').eq('user_id', (await supabaseClient.auth.getUser()).data.user.id).single();
                 if (data) document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits || 0}`;
             } catch (e) { console.error("积分加载失败"); }
         }
 
         async function loadProjects() {
-            // 🚨 强力诊断 1：捕获拉取列表的错误
             const { data, error } = await supabaseClient.rpc('get_my_projects', { my_email: window.currentUserEmail });
-            
-            document.getElementById('loadingTips').style.display = 'none';
-            document.getElementById('gridContainer').style.display = 'flex';
-
-            if (error) { 
-                alert("🚨 数据库错误 (请检查SQL是否运行):\n" + error.message);
-                console.error("RPC 加载失败:", error); 
-                return; 
-            }
+            if (error) { console.error("RPC 加载失败:", error); return; }
 
             const isAdmin = data.some(p => p.my_role === 'owner' || p.my_role === 'admin');
             document.getElementById('adminPanelBtn').style.display = isAdmin ? 'inline-flex' : 'none';
@@ -115,6 +103,7 @@
                 id: p.id, 
                 name: p.name, 
                 episodes: (p.data && p.data.episodes) ? p.data.episodes : [], 
+                assets: p.assets || {"characters":[],"scenes":[],"props":[],"effects":[]}, // 提取资产库
                 my_role: p.my_role, 
                 my_status: p.my_status, 
                 members: p.members || []
@@ -163,11 +152,13 @@
                     </div>`;
                 }
 
+                // 🌟 核心补全：增加了 ✏️ 重命名按钮，并对齐事件绑定
                 return `
                 <div class="card" onclick="${currentView === 'projects' ? `openProject('${item.id}')` : `enterEpisode('${item.id}')`}">
                     <div class="card-actions">
                         <div class="action-icon" title="协作" onclick="event.stopPropagation(); openShareModal('${item.id}')">👥</div>
-                        <div class="action-icon delete" title="删除" onclick="event.stopPropagation(); deleteProject('${item.id}')">🗑️</div>
+                        <div class="action-icon" title="重命名" onclick="event.stopPropagation(); ${currentView === 'projects' ? `renameProject('${item.id}')` : `renameEpisode('${item.id}')`}">✏️</div>
+                        <div class="action-icon delete" title="删除" onclick="event.stopPropagation(); ${currentView === 'projects' ? `deleteProject('${item.id}')` : `deleteEpisode('${item.id}')`}">🗑️</div>
                     </div>
                     <div class="card-icon">${currentView === 'projects' ? '📁' : '🎬'}</div>
                     <div class="card-title" title="${item.name}">${item.name}</div>
@@ -184,21 +175,8 @@
             const name = prompt("请输入项目名称:");
             if (name) {
                 const id = 'proj_' + Date.now();
-                
-                // 🚨 强力诊断 2：捕获创建主表的错误
-                const { error: err1 } = await supabaseClient.from('shared_projects').insert([{ id, name, owner_email: window.currentUserEmail }]);
-                if (err1) {
-                    alert("🚨 新建项目失败 (RLS 权限拦截):\n" + err1.message);
-                    return;
-                }
-
-                // 🚨 强力诊断 3：捕获绑定身份的错误
-                const { error: err2 } = await supabaseClient.from('project_members').insert([{ project_id: id, user_email: window.currentUserEmail, role: 'owner', status: 'active' }]);
-                if (err2) {
-                    alert("🚨 绑定管理员身份失败:\n" + err2.message);
-                    return;
-                }
-
+                await supabaseClient.from('shared_projects').insert([{ id, name, owner_email: window.currentUserEmail }]);
+                await supabaseClient.from('project_members').insert([{ project_id: id, user_email: window.currentUserEmail, role: 'owner', status: 'active' }]);
                 await loadProjects(); 
             }
         }
@@ -209,19 +187,45 @@
             if (name) {
                 const newEp = { id: 'ep_' + Date.now(), name, data: {} };
                 const updatedEpisodes = [...proj.episodes, newEp];
-                const { error } = await supabaseClient.from('shared_projects').update({ data: { episodes: updatedEpisodes } }).eq('id', activeProjectId);
-                if (error) {
-                    alert("🚨 新建分集失败:\n" + error.message);
-                    return;
-                }
+                await supabaseClient.from('shared_projects').update({ data: { episodes: updatedEpisodes } }).eq('id', activeProjectId);
+                await loadProjects();
+            }
+        }
+
+        // 🌟 补全：项目与分集的重命名逻辑
+        async function renameProject(id) {
+            const proj = projects.find(p => p.id === id);
+            const newName = prompt("重命名项目：", proj.name);
+            if (newName && newName.trim()) {
+                await supabaseClient.from('shared_projects').update({ name: newName.trim() }).eq('id', id);
+                await loadProjects();
+            }
+        }
+
+        async function renameEpisode(epId) {
+            const proj = projects.find(p => p.id === activeProjectId);
+            const ep = proj.episodes.find(e => e.id === epId);
+            const newName = prompt("重命名分集：", ep.name);
+            if (newName && newName.trim()) {
+                const updatedEpisodes = proj.episodes.map(e => e.id === epId ? { ...e, name: newName.trim() } : e);
+                await supabaseClient.from('shared_projects').update({ data: { episodes: updatedEpisodes } }).eq('id', activeProjectId);
                 await loadProjects();
             }
         }
 
         async function deleteProject(id) {
             if (confirm("确定要删除吗？这将清除云端所有数据。")) {
-                const { error } = await supabaseClient.from('shared_projects').delete().eq('id', id);
-                if (error) alert("删除失败: " + error.message);
+                await supabaseClient.from('shared_projects').delete().eq('id', id);
+                await loadProjects();
+            }
+        }
+
+        // 🌟 补全：删除分集逻辑
+        async function deleteEpisode(epId) {
+            if (confirm("确定要删除这个分集及其包含的所有分镜吗？")) {
+                const proj = projects.find(p => p.id === activeProjectId);
+                const updatedEpisodes = proj.episodes.filter(e => e.id !== epId);
+                await supabaseClient.from('shared_projects').update({ data: { episodes: updatedEpisodes } }).eq('id', activeProjectId);
                 await loadProjects();
             }
         }
@@ -277,6 +281,9 @@
             if (ep.data) {
                 for (let key of Object.keys(ep.data)) await DB.set(key, ep.data[key]);
             }
+            
+            // 🌟 核心改进闭环：将该项目的独立资产库（Assets）同步加载至本地环境供 module1 使用
+            await DB.set('extractedData', proj.assets || {"characters":[],"scenes":[],"props":[],"effects":[]});
             await DB.set('active_context', { projectId: proj.id, epId: ep.id });
             window.location.href = 'module1.html';
         }
