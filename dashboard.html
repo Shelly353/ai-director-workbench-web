@@ -183,8 +183,12 @@
 
     async function createEpisode() {
     try {
+        // 1. 强制转字符串对比，防止 ID 匹配失败导致没反应
         const proj = projects.find(p => String(p.id) === String(activeProjectId));
-        if (!proj) return;
+        if (!proj) {
+            alert("未找到项目环境，请刷新页面！");
+            return;
+        }
 
         const currentEpisodes = proj.episodes || [];
         const name = prompt("请输入分集名称:", `第 ${currentEpisodes.length + 1} 集`);
@@ -193,7 +197,7 @@
             const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
             const updatedEpisodes = [...currentEpisodes, newEp];
             
-            // 1. 安全保存到云端
+            // 2. 将新分集更新到 Supabase 云端
             const { error } = await supabaseClient
                 .from('shared_projects')
                 .update({ 
@@ -203,16 +207,11 @@
 
             if (error) throw error;
             
-            // 2. 从云端拉取最新数据（更新全局 projects 数组）
+            // 3. 核心修复：重新拉取数据，并刷新当前页面视图！
             await loadProjects(); 
+            openProject(activeProjectId); // 强制重新渲染分集列表，解决“创建成功但不显示”
             
-            // 🌟 3. 核心修复：重新渲染当前项目的分集视图！
-            // 假设您点击项目卡片进入详情时用的函数叫 openProject，我们需要再调一次它来刷新界面
-            if (typeof openProject === 'function') {
-                openProject(activeProjectId);
-            }
-            
-            console.log("✅ 分集创建并渲染成功");
+            console.log("✅ 分集创建并显示成功");
         }
     } catch (e) {
         console.error("创建分集错误:", e.message);
