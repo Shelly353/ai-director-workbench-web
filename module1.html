@@ -655,7 +655,8 @@
         function removeRefImg(e, cat, idx, imgIdx) { e.stopPropagation(); extractedData[cat][idx].refImages.splice(imgIdx, 1); saveCurrentState(); renderAssetsUI(); }
 
         // ==========================================
-        // 🌟 终极修复：携带 Token 进行 Wan2.7 的任务轮询
+        // 🌟 终极修复：使用原生、不带 Auth Headers 的裸请求轮询
+        // 完美绕过代理服务器的 CORS 预检 401 拦截
         // ==========================================
         async function genAssetImage(cat, idx, type) {
             const styleKey = document.getElementById('styleSelect').value;
@@ -685,40 +686,37 @@
             if (imgBox) imgBox.innerHTML = `<span>🎨 正在提交生图任务...</span>`;
 
             try {
-                // 🌟 获取实时 Token 护盾
-                let validToken = localStorage.getItem('userToken') || "";
-                if (window.cloudSupabase) {
-                    const { data: { session } } = await window.cloudSupabase.auth.getSession();
-                    if (session) validToken = session.access_token;
-                }
-
                 const res = await apiRequest('/api/image/create', { model: selectedModel, prompt: fullPrompt, images: inlineImgs, ratio: '16:9', size: "1920*1080", async_mode: true });
                 let b64 = "";
                 
                 if (res.taskId) {
-                    if (imgBox) imgBox.innerHTML = `<span>⏳ 生图排队中 (ID:${res.taskId.substring(0,4)}...)</span>`;
+                    if (imgBox) imgBox.innerHTML = `<span>⏳ 排队中 (ID:${res.taskId.substring(0,4)}...)</span>`;
                     
                     while (true) {
                         await new Promise(r => setTimeout(r, 3500));
                         
-                        // 🌟 携带 Token 向代理服务器发起轮询 GET 请求
+                        // 🌟 恢复旧版的“无痕”简单 GET 请求！
                         let currentUrl = typeof API_BASE !== 'undefined' ? API_BASE : "https://proxy-server-web.onrender.com"; 
-
-                        const pollRes = await fetch(`${currentUrl}/api/dashscope/poll/${res.taskId}`, {
-                            method: 'GET',
-                            headers: { 
-                                'Authorization': `Bearer ${validToken}`,
-                                'Content-Type': 'application/json'
-                            } 
-                        });
                         
-                        if (!pollRes.ok) throw new Error(`轮询被服务器拒绝 (HTTP ${pollRes.status})`);
+                        // ⚠️ 注意这里：绝对不加 Headers 对象！
+                        const pollRes = await fetch(`${currentUrl}/api/dashscope/poll/${res.taskId}`);
+                        
+                        if (!pollRes.ok) throw new Error(`轮询被拒绝 HTTP ${pollRes.status}`);
 
                         const pollData = await pollRes.json();
                         const taskStatus = pollData.output?.task_status || pollData.task_status;
                         
                         if (taskStatus === 'SUCCEEDED') { 
-                            b64 = pollData.output.results[0].url; 
+                            const out = pollData.output || {};
+                            if (out.results && out.results.length > 0) b64 = out.results[0].url || out.results[0].image_url;
+                            else if (out.choices && out.choices[0]?.message?.content) {
+                                const content = out.choices[0].message.content;
+                                const imgItem = Array.isArray(content) ? content.find(c => c.image || c.url) : null;
+                                if (imgItem) b64 = imgItem.image || imgItem.url; else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
+                            } else if (out.image_url) b64 = out.image_url;
+                            else if (out.image) b64 = out.image;
+                            
+                            if (!b64) throw new Error("提取图片链接失败");
                             break; 
                         } else if (taskStatus === 'FAILED') {
                             throw new Error(pollData.output?.message || "大模型生成任务失败");
