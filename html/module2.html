@@ -3,8 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <title>AI 导演 - 步骤2：分镜匹配</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
     <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
+/* 用户状态栏样式 */
+.user-panel { display: flex; align-items: center; gap: 15px; margin-left: 20px; }
+.credit-badge { background: #fff5f5; color: #ff6b6b; padding: 5px 12px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 13px; white-space: nowrap; }
+.logout-btn { color: #86909c; text-decoration: none; font-size: 13px; cursor: pointer; transition: 0.2s; }
+.logout-btn:hover { color: #f53f3f; }
         .header { position: sticky; top: 0; z-index: 1000; background: #ffffff; padding: 20px 25px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e6eb; box-shadow: 0 4px 12px rgba(0,0,0,0.08); min-height: 80px; box-sizing: border-box; }
         .steps { display: flex; gap: 20px; font-size: 15px; }
         .btn { display: inline-flex; align-items: center; justify-content: center; height: 38px; line-height: 1; padding: 0 18px; white-space: nowrap; font-size: 14px; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
@@ -38,7 +47,10 @@
                 <div class="step active">2. 分镜匹配</div>
                 <div class="step">3. 视频生成</div>
             </div>
-        </div> <div style="display:flex; gap:12px; align-items:center;">
+        </div> 
+<div style="display:flex; gap:12px; align-items:center;">
+<span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
+    <a class="logout-btn" style="margin-right:15px;" onclick="logout()">退出</a>
             <select id="g_ratio">
                 <option value="16:9">16:9 横屏</option>
                 <option value="9:16">9:16 竖屏</option>
@@ -82,12 +94,18 @@
     </div>
 
 <div id="globalImportModal" class="modal-bg">
-        <div class="modal-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px;">
-                <h3 style="margin:0;">📥 从全局图库提取资产至当前分镜</h3>
+        <div class="modal-content" style="height: 80vh;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:15px;">
+                <h3 style="margin:0;">📥 从项目资产库提取至分镜</h3>
                 <span class="modal-close" onclick="closeGlobalImport()">×</span>
             </div>
-            <div id="globalImportGrid" style="display:flex; flex-wrap:wrap; gap:15px; overflow-y:auto; flex:1; padding-top:10px;"></div>
+            
+            <div style="display:flex; gap:15px; margin-top:15px; border-bottom:1px solid #eee; padding-bottom:15px;">
+                <button id="tabShared" class="btn btn-primary" onclick="loadLibraryTab('shared')">👥 团队共享资产</button>
+                <button id="tabPrivate" class="btn btn-outline" onclick="loadLibraryTab('private')">🔒 我的私有关键帧</button>
+            </div>
+
+            <div id="globalImportGrid" style="display:flex; flex-wrap:wrap; gap:15px; overflow-y:auto; flex:1; padding-top:15px; align-content: flex-start;"></div>
         </div>
     </div>
 
@@ -116,6 +134,55 @@
         let extractedData = { characters: [], scenes: [], props: [], effects: [] };
         let savedRange = null;
         let currentImportRowId = null;
+// ==========================================
+// 🌟 核心：Supabase 数据库连接与通用扣费系统
+// ==========================================
+const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// 🌟 新增：从云端数据库获取并显示实际积分
+async function fetchCredits() {
+    const userId = localStorage.getItem('userId');
+    if (!userId) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from('profiles')
+            .select('credits')
+            .eq('user_id', userId)
+            .single();
+        if (data) {
+            // 将云端积分渲染到页面右上角
+            document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
+            localStorage.setItem('userCredits', data.credits);
+        }
+    } catch (e) {
+        console.error("获取积分失败:", e);
+    }
+}
+
+// 🌟 统一的服务器端扣费接口
+async function checkAndDeductCredits(actionKey, modelName) {
+    const isGemini = modelName.toLowerCase().includes('gemini');
+    
+    // 直接调用服务器端的 RPC 函数
+    const { data: newCredits, error } = await supabaseClient.rpc('deduct_credits_v2', { 
+        action_key: actionKey, 
+        is_gemini: isGemini 
+    });
+
+    if (error) {
+        alert(`❌ 操作失败：${error.message}`);
+        return false;
+    }
+
+    // 扣费成功，更新 UI 显示
+    document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
+    localStorage.setItem('userCredits', newCredits);
+    log(`💎 服务器已结算：[${actionKey}] 扣费成功，剩余 ${newCredits} 💎。`);
+    return true;
+}
+// ==========================================
 
 // 🌟 新增：保存当前进度并返回
 async function saveAndBack() {
@@ -123,7 +190,26 @@ async function saveAndBack() {
                 syncRichTextState();
                 await DB.set('storyboardData', storyboardData);
                 await DB.set('globalRatio', document.getElementById('g_ratio').value);
-                // 🌟 修复点：添加 ../ 前缀
+                
+                // 🌟 核心升级：退出前强制将分镜进度打入团队云端大盘
+                const ctx = await DB.get('active_context');
+                if (ctx && ctx.projectId) {
+                    const { data: serverProj } = await supabaseClient.from('shared_projects').select('data').eq('id', ctx.projectId).limit(1);
+                    if (serverProj && serverProj.length > 0) {
+                        let existingData = serverProj[0].data || {};
+                        if (typeof existingData === 'string') existingData = JSON.parse(existingData);
+
+                        let eps = existingData.episodes || [];
+                        const idx = eps.findIndex(e => String(e.id) === String(ctx.epId));
+                        if (idx !== -1) {
+                            eps[idx].data = eps[idx].data || {};
+                            eps[idx].data.storyboardData = storyboardData;
+                            eps[idx].data.globalRatio = document.getElementById('g_ratio').value;
+                            await supabaseClient.from('shared_projects').update({ data: existingData }).eq('id', ctx.projectId);
+                        }
+                    }
+                }
+                
                 location.href = '../dashboard.html'; 
             } catch (e) {
                 location.href = '../dashboard.html';
@@ -131,8 +217,17 @@ async function saveAndBack() {
         }
 
 window.onload = async () => {
+
+    // 🌟 核心安全：检查登录凭证
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+        // 如果没有找到身份信息，不给任何提示，直接强行踢回登录页
+        // 使用 replace 而不是 href，是为了不让用户再通过“返回”跳回来
+        window.location.replace('index.html'); 
+        return;
+    }
+            await fetchCredits();
             log(`系统就绪。正在加载全局视觉资产及模型配置...`);
-            
             storyboardData = await DB.get('storyboardData') || [];
             extractedData = await DB.get('extractedData') || { characters: [], scenes: [], props: [], effects: [] };
             
@@ -183,6 +278,10 @@ window.onload = async () => {
                 model: selectedLlm,
                 endpoint: selectedLlm.includes('gemini') ? "/api/gemini/chat" : "/api/deepseek/chat"
             };
+
+// 替换原本的 cost 计算和扣费
+if (!(await checkAndDeductCredits('split_script', selectedLlm))) return;
+
             // 🌟 强制保存回全局数据库，把旧的 Gemini 彻底盖掉！
             await DB.set('llm_config', config);
 
@@ -431,33 +530,79 @@ function renderStoryboardUI() {
             document.querySelectorAll('.rich-input').forEach(el => { el.addEventListener('input', handleRichInput); });
         }
 
-        function openGlobalImport(rowId) {
+// ==========================================
+        // 🌟 升级：项目级资产库弹窗与云端拉取逻辑
+        // ==========================================
+        async function openGlobalImport(rowId) {
             currentImportRowId = rowId;
-            let pool = [];
-            const add = (n,b) => { if(b && !pool.find(x=>x.b64===b)) pool.push({name:n, b64:b}); };
-            
-            if(extractedData.characters) extractedData.characters.forEach(c => { add(c.name, c.img); if(c.refImages) c.refImages.forEach((r,i)=>add(c.name+'-参考', r)); });
-            if(extractedData.props) extractedData.props.forEach(p => { add(p.name, p.img); if(p.refImages) p.refImages.forEach((r,i)=>add(p.name+'-参考', r)); });
-            if(extractedData.effects) extractedData.effects.forEach(e => { add(e.name, e.img); if(e.refImages) e.refImages.forEach((r,i)=>add(e.name+'-参考', r)); });
-            if(extractedData.scenes) extractedData.scenes.forEach(s => { add(s.name+'-正视', s.forwardImg); add(s.name+'-反打', s.reverseImg); if(s.refImages) s.refImages.forEach((r,i)=>add(s.name+'-参考', r)); });
-
-            if (pool.length === 0) return alert("第一步中没有生成或上传任何资产！");
-
-            document.getElementById('globalImportGrid').innerHTML = pool.map(item => `
-                <div style="width:110px; cursor:pointer; text-align:center; transition:0.2s; border:2px solid transparent; border-radius:8px; padding:5px;" 
-                     onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'"
-                     onclick="confirmGlobalImport('${item.b64}')">
-                    <img src="${item.b64}" style="width:100px; height:100px; object-fit:cover; border-radius:6px; border:1px solid #e5e6eb;">
-                    <div style="font-size:11px; color:#4e5969; margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${item.name}</div>
-                </div>
-            `).join('');
-            
             document.getElementById('globalImportModal').style.display = 'flex';
+            loadLibraryTab('shared'); // 默认加载共享库
+        }
+
+        async function loadLibraryTab(tabType) {
+            // 切换按钮样式
+            document.getElementById('tabShared').className = tabType === 'shared' ? 'btn btn-primary' : 'btn btn-outline';
+            document.getElementById('tabPrivate').className = tabType === 'private' ? 'btn btn-primary' : 'btn btn-outline';
+
+            const grid = document.getElementById('globalImportGrid');
+            grid.innerHTML = "<div style='width:100%; text-align:center; padding:40px; color:#86909c;'>⏳ 正在从云端实时拉取资产，请稍候...</div>";
+
+            try {
+                const ctx = await DB.get('active_context');
+                if (!ctx || !ctx.projectId) throw new Error("无法识别当前项目归属！");
+                
+                const { data: { user } } = await supabaseClient.auth.getUser();
+                let pool = [];
+
+                if (tabType === 'shared') {
+                    // 读取当前项目的共享资产
+                    const { data } = await supabaseClient.from('shared_projects').select('assets').eq('id', ctx.projectId).single();
+                    if (data && data.assets) {
+                        const ast = data.assets;
+                        ['characters', 'props', 'effects'].forEach(c => {
+                            if(ast[c]) ast[c].forEach(x => { if(x.img) pool.push({name: x.name, url: x.img, label: '共享资产'}) });
+                        });
+                        if(ast.scenes) ast.scenes.forEach(s => { 
+                            if(s.forwardImg) pool.push({name: s.name, url: s.forwardImg, label: '场景正视'});
+                            if(s.reverseImg) pool.push({name: s.name, url: s.reverseImg, label: '场景反打'});
+                        });
+                    }
+                } else {
+                    // 读取自己的绝对私有关键帧（生图工作台生成）
+                    const { data } = await supabaseClient.from('private_keyframes')
+                        .select('img_url')
+                        .eq('project_id', ctx.projectId)
+                        .eq('user_email', user.email);
+                    
+                    if (data) {
+                        data.forEach((k, i) => pool.push({ name: `关键帧 ${i+1}`, url: k.img_url, label: '私有关键帧' }));
+                    }
+                }
+
+                if (pool.length === 0) {
+                    grid.innerHTML = "<div style='width:100%; text-align:center; padding:50px; color:#c9cdd4; border:2px dashed #eee; border-radius:12px;'>此分类下暂无资产数据。</div>";
+                    return;
+                }
+
+                grid.innerHTML = pool.map(item => `
+                    <div style="width:110px; cursor:pointer; text-align:center; padding:5px; border:2px solid transparent; border-radius:8px; transition:0.2s;" 
+                         onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'"
+                         onclick="confirmGlobalImport('${item.url}')">
+                        <img src="${item.url}" style="width:100px; height:100px; object-fit:cover; border-radius:6px; border:1px solid #e5e6eb;">
+                        <div style="font-size:11px; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#4e5969;">${item.name}</div>
+                        <div style="font-size:10px; color:var(--primary); background:#e8f3ff; border-radius:4px; display:inline-block; padding:2px 6px; margin-top:4px;">${item.label}</div>
+                    </div>
+                `).join('');
+
+            } catch (e) {
+                grid.innerHTML = `<div style='width:100%; text-align:center; padding:20px; color:#f53f3f;'>❌ 加载失败: ${e.message}</div>`;
+            }
         }
 
         function confirmGlobalImport(b64) {
             syncRichTextState(); 
             const row = storyboardData.find(x => x.id == currentImportRowId);
+            // 查重：避免同一个格子导入两张相同的图
             if (row && !row.images.includes(b64)) {
                 row.images.push(b64);
                 renderStoryboardUI();
@@ -480,14 +625,44 @@ function renderStoryboardUI() {
 
         function updateSbDuration(id, val) { const row = storyboardData.find(x => x.id == id); if(row) row.duration = parseInt(val); }
         
+// 🌟 升级：本地上传的分镜草图直接存为“私有关键帧”
         function uploadSbImg(id) {
-            triggerUpload((b64) => {
+            triggerUpload(async (b64) => {
                 syncRichTextState();
-                const row = storyboardData.find(x => x.id == id);
-                if(row) { row.images.push(b64); renderStoryboardUI(); }
+                log("⏳ 正在同步分镜草图至云端...");
+                
+                try {
+                    // 1. 上传物理文件到云盘，获取永久链接
+                    b64 = await window.uploadMediaToCloud(b64, 'png');
+                    
+                    // 2. 获取当前项目归属和用户身份
+                    const ctx = await DB.get('active_context');
+                    const { data: { user } } = await supabaseClient.auth.getUser();
+                    
+                    // 3. 🌟 绝对私有写入：存入 private_keyframes 表
+                    if (ctx && ctx.projectId && user) {
+                        await supabaseClient.from('private_keyframes').insert([{
+                            project_id: ctx.projectId,
+                            user_email: user.email,
+                            img_url: b64
+                        }]);
+                        log(`✅ 已安全保存至您的【私有关键帧库】，团队不可见！`);
+                    }
+
+                    // 4. 将图片插入当前的分镜格子中
+                    const row = storyboardData.find(x => x.id == id);
+                    if(row) { 
+                        row.images.push(b64); 
+                        // 同步一下文本框防止丢失，并保存页面进度
+                        await DB.set('storyboardData', storyboardData);
+                        renderStoryboardUI(); 
+                    }
+                } catch (err) {
+                    console.error("上传并保存关键帧失败:", err);
+                    log(`❌ 上传失败: ${err.message}`);
+                }
             });
-        }
-        
+        }   
         function removeSbImg(id, imgIdx) {
             syncRichTextState();
             const row = storyboardData.find(x => x.id == id);
@@ -581,6 +756,11 @@ function renderStoryboardUI() {
                 btn.disabled = false;
             }
         } // 🌟 之前就是不小心删掉了这个关键的闭合大括号！
+
+function logout() {
+    localStorage.clear();
+    location.href = '../login.html'; // 🌟 注意这里多了 ../
+}
 
         // ==========================================
         // 🌟 新增：生图独立工作台弹窗控制逻辑
