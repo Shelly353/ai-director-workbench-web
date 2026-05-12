@@ -73,7 +73,7 @@
             document.getElementById('headerUserName').innerText = user.email.split('@')[0];
             document.getElementById('userAvatar').innerText = user.email.charAt(0);
 
-            try { const { data } = await myDB.from('profiles').select('credits').eq('user_id', user.id).single(); if(data) document.getElementById('headerCredit').innerText = "💎 积分: " + data.credits; } catch(e){}
+            try { const { data } = await myDB.from('profiles').select('credits').eq('user_id', user.id).maybeSingle(); if(data) document.getElementById('headerCredit').innerText = "💎 积分: " + data.credits; } catch(e){}
             
             try { if (typeof DB !== 'undefined' && DB.init) await DB.init(); await packCurrentWorkspaceToCloud(); } catch(e) {}
             
@@ -146,51 +146,34 @@
         }
 
        async function createEpisode() {
-            alert("📍 追踪点 1：成功触发点击！进入 createEpisode 函数。");
-            
             try {
-                if (!activeProjectId) {
-                    return alert("❌ 追踪失败：activeProjectId 为空。系统不知道您在哪个项目里！");
-                }
-                alert("📍 追踪点 2：当前项目 ID 是 " + activeProjectId);
-
                 const proj = projects.find(p => String(p.id) === String(activeProjectId));
-                if (!proj) {
-                    return alert("❌ 追踪失败：在 projects 数组里找不到这个项目！");
-                }
-                alert("📍 追踪点 3：成功锁定项目 [" + proj.name + "]。当前已有分集数量：" + proj.episodes.length);
+                if (!proj) return alert("❌ 找不到项目。");
 
                 const name = prompt("请输入新分集的名称：", "第 " + (proj.episodes.length + 1) + " 集");
-                if (!name || !name.trim()) {
-                    return alert("❌ 追踪结束：您取消了输入，或输入了空名字。");
-                }
-                alert("📍 追踪点 4：准备创建，分集名字叫 [" + name + "]");
+                if (!name || !name.trim()) return;
 
                 const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
-                
-                // 光速渲染：瞬间显示在屏幕上
                 proj.episodes.push(newEp);
-                renderView();
-                alert("📍 追踪点 5：分集已强行显示在屏幕上！准备发送给 Supabase...");
+                renderView(); // 瞬间显示在屏幕上
 
-                // 直接传入原生 Object，彻底解决空对象写入失败问题
                 let payload = { ...proj.data, episodes: proj.episodes };
-                
-                console.log("📤 即将发送的 Payload:", payload); // 打印到控制台，方便查看
-                
-                const { error, data } = await myDB.from('shared_projects').update({ data: payload }).eq('id', activeProjectId).select();
+
+                // 🌟 核心侦测：尾部加上 .select()！强制要求数据库返回修改结果，绝不允许它静默装死！
+                const { data, error } = await myDB.from('shared_projects').update({ data: payload }).eq('id', activeProjectId).select();
                 
                 if (error) {
-                    alert("❌ 云端写入失败: " + error.message);
+                    alert("云端写入报错: " + error.message);
+                    proj.episodes.pop(); renderView(); 
+                } else if (!data || data.length === 0) {
+                    // 🚨 照妖镜生效：如果没有报错，但返回修改了 0 行，说明被 RLS 拦截了！
+                    alert("🚨 写入被云端数据库【静默拦截】！\n请回到 Supabase 后台，关闭 shared_projects 表的 RLS (Row Level Security)。");
                     proj.episodes.pop(); renderView(); 
                 } else {
-                    alert("📍 追踪点 6：✅ 成功写入云端！Supabase 接收完毕！");
+                    console.log("✅ 成功写入云端，数据已锁定！", data);
                 }
-            } catch (err) { 
-                alert("❌ 发生代码异常: " + err.message); 
-            }
+            } catch (err) { alert("❌ 操作异常: " + err.message); }
         }
-
         async function deleteProject(id) {
             if (confirm("确定要删除吗？")) {
                 await myDB.from('shared_projects').delete().eq('id', id);
