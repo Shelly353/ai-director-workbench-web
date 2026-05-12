@@ -655,8 +655,7 @@
         function removeRefImg(e, cat, idx, imgIdx) { e.stopPropagation(); extractedData[cat][idx].refImages.splice(imgIdx, 1); saveCurrentState(); renderAssetsUI(); }
 
         // ==========================================
-        // 🌟 终极修复：使用原生、不带 Auth Headers 的裸请求轮询
-        // 完美绕过代理服务器的 CORS 预检 401 拦截
+        // 🌟 终极免疫解析器：无论 API 如何畸形，永远不会崩溃
         // ==========================================
         async function genAssetImage(cat, idx, type) {
             const styleKey = document.getElementById('styleSelect').value;
@@ -695,10 +694,8 @@
                     while (true) {
                         await new Promise(r => setTimeout(r, 3500));
                         
-                        // 🌟 恢复旧版的“无痕”简单 GET 请求！
+                        // 🌟 回退到最稳妥的旧版“无头请求”，避免 401 预检拦截
                         let currentUrl = typeof API_BASE !== 'undefined' ? API_BASE : "https://proxy-server-web.onrender.com"; 
-                        
-                        // ⚠️ 注意这里：绝对不加 Headers 对象！
                         const pollRes = await fetch(`${currentUrl}/api/dashscope/poll/${res.taskId}`);
                         
                         if (!pollRes.ok) throw new Error(`轮询被拒绝 HTTP ${pollRes.status}`);
@@ -707,22 +704,38 @@
                         const taskStatus = pollData.output?.task_status || pollData.task_status;
                         
                         if (taskStatus === 'SUCCEEDED') { 
-                            const out = pollData.output || {};
-                            if (out.results && out.results.length > 0) b64 = out.results[0].url || out.results[0].image_url;
-                            else if (out.choices && out.choices[0]?.message?.content) {
-                                const content = out.choices[0].message.content;
-                                const imgItem = Array.isArray(content) ? content.find(c => c.image || c.url) : null;
-                                if (imgItem) b64 = imgItem.image || imgItem.url; else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
-                            } else if (out.image_url) b64 = out.image_url;
-                            else if (out.image) b64 = out.image;
+                            // 🛡️ 钢板防御：兼容各种厂商（阿里/字节/Google）错乱的返回值结构
+                            const out = pollData.output || pollData;
                             
-                            if (!b64) throw new Error("提取图片链接失败");
+                            if (out.results && Array.isArray(out.results) && out.results.length > 0) {
+                                b64 = out.results[0].url || out.results[0].image_url;
+                            } else if (out.image_url) {
+                                b64 = out.image_url;
+                            } else if (out.image) {
+                                b64 = out.image;
+                            } else if (out.url) {
+                                b64 = out.url;
+                            } else if (out.choices && Array.isArray(out.choices) && out.choices.length > 0) {
+                                const content = out.choices[0]?.message?.content;
+                                if (Array.isArray(content)) {
+                                    const imgItem = content.find(c => c.image || c.url);
+                                    if (imgItem) b64 = imgItem.image || imgItem.url;
+                                } else if (typeof content === 'string' && content.startsWith('http')) {
+                                    b64 = content;
+                                }
+                            }
+
+                            // 如果找了一圈还是没找到 URL，说明模型内部被拦截或出错，强行报错打断，不再去读 [0]！
+                            if (!b64) {
+                                console.error("API返回了成功，但无法解析出图片链接字段:", pollData);
+                                throw new Error("生图已完成，但未能在响应中找到有效的图片链接。");
+                            }
                             break; 
                         } else if (taskStatus === 'FAILED') {
-                            throw new Error(pollData.output?.message || "大模型生成任务失败");
+                            throw new Error(pollData.output?.message || pollData.message || "大模型生图失败");
                         }
                     }
-                } else if (res.data && res.data.length > 0) {
+                } else if (res.data && Array.isArray(res.data) && res.data.length > 0) {
                     b64 = res.data[0].url;
                 }
 
@@ -738,7 +751,7 @@
             } catch (e) { 
                 console.error("生图报错:", e);
                 log(`❌ 生图失败: ${e.message}`);
-                if (imgBox) imgBox.innerHTML = `<span style="color:red">失败: ${e.message}</span>`; 
+                if (imgBox) imgBox.innerHTML = `<span style="color:red; font-size: 11px;">失败: ${e.message}</span>`; 
             }
         }
 
