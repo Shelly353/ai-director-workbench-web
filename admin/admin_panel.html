@@ -2,194 +2,270 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>AI 导演 - 团队资源管理</title>
+    <title>AI 导演 - 团队数据管理中心</title>
     <link rel="stylesheet" href="../css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         .admin-container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
-        .stats-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-top: 20px; }
-        .stat-card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .data-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; border-radius: 8px; overflow: hidden; }
-        .data-table th, .data-table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
-        .data-table th { background: #f8f9fa; font-weight: bold; }
-        .tab-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        
+        /* 顶部核心数据卡片 */
+        .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
+        .metric-card { background: #fff; padding: 25px 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); text-align: center; border: 1px solid #f2f3f5; transition: 0.2s; }
+        .metric-card:hover { transform: translateY(-5px); box-shadow: 0 10px 24px rgba(0,0,0,0.08); }
+        .metric-value { font-size: 32px; font-weight: 800; line-height: 1.2; margin-bottom: 5px; }
+        .metric-label { font-size: 13px; color: #86909c; font-weight: bold; }
+
+        /* 图表区 */
+        .stats-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #f2f3f5; }
+        
+        /* 数据表区 */
+        .data-table-wrapper { background: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #f2f3f5; overflow: hidden; padding: 20px; }
+        .data-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .data-table th, .data-table td { padding: 14px 12px; text-align: left; border-bottom: 1px solid #f2f3f5; font-size: 14px; }
+        .data-table th { background: #fafafa; font-weight: 600; color: #4e5969; }
+        .data-table tr:hover { background: #f8fbff; }
+        
+        /* 徽章 */
+        .badge-ep { background: #e8f3ff; color: #1677ff; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+        .badge-ast { background: #f6ffed; color: #52c41a; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="breadcrumb"><span class="breadcrumb-link" onclick="location.href='../dashboard.html'">🏠 返回工作台</span> / 📊 资源监控</div>
+        <div class="breadcrumb"><span class="breadcrumb-link" onclick="location.href='../dashboard.html'">🏠 返回工作台</span> <span style="margin:0 10px; color:#c9cdd4;">/</span> 📊 剧组大盘数据</div>
+        <div style="display:flex; align-items:center; gap: 15px;">
+            <button class="btn btn-primary" style="padding: 8px 20px;" onclick="exportToExcel()">📥 导出明细报表</button>
+        </div>
     </div>
 
     <div class="admin-container">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3>团队资源消耗分析</h3>
-            <button class="btn btn-primary" onclick="exportToExcel()">📥 导出 Excel 数据</button>
-        </div>
-
-        <div class="tab-bar" id="projectTabs">
-            <button class="btn btn-primary" id="tab_all" onclick="filterByProject('all')">全部项目</button>
+        
+        <div class="metric-grid">
+            <div class="metric-card">
+                <div class="metric-value" style="color: #1d2129;" id="m_projs">0</div>
+                <div class="metric-label">📁 运行中项目总数</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" style="color: #1677ff;" id="m_eps">0</div>
+                <div class="metric-label">🎬 剧本分集总数</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" style="color: #52c41a;" id="m_assets">0</div>
+                <div class="metric-label">🎨 视觉资产总计 (张)</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" style="color: #722ed1;" id="m_members">0</div>
+                <div class="metric-label">👥 剧组协作成员</div>
+            </div>
         </div>
 
         <div class="stats-grid">
-            <div class="stat-card" style="height: 300px;">
-                <canvas id="usageChart"></canvas>
+            <div class="stat-card" style="height: 320px; display: flex; flex-direction: column;">
+                <h4 style="margin: 0 0 15px 0; color: #1d2129;">各项目规模对比 (分集数)</h4>
+                <div style="flex: 1; min-height: 0;"><canvas id="barChart"></canvas></div>
             </div>
-            <div class="stat-card" style="height: 300px;">
-                <h4 style="margin-top:0;">消耗占比</h4>
-                <canvas id="pieChart"></canvas>
+            <div class="stat-card" style="height: 320px; display: flex; flex-direction: column;">
+                <h4 style="margin: 0 0 15px 0; color: #1d2129;">视觉资产结构占比</h4>
+                <div style="flex: 1; min-height: 0;"><canvas id="pieChart"></canvas></div>
             </div>
         </div>
 
-        <table class="data-table" id="rawDataTable">
-            <thead>
-                <tr>
-                    <th>时间</th>
-                    <th>成员邮箱</th>
-                    <th>项目名称 / ID</th>
-                    <th>操作类型</th>
-                    <th>消耗积分</th>
-                </tr>
-            </thead>
-            <tbody id="statsBody"></tbody>
-        </table>
+        <div class="data-table-wrapper">
+            <h4 style="margin: 0 0 5px 0; color: #1d2129;">项目运营明细</h4>
+            <div style="font-size: 12px; color: #86909c; margin-bottom: 15px;">实时读取云端项目节点库数据</div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>项目名称</th>
+                        <th>主理人邮箱</th>
+                        <th>分集规模</th>
+                        <th>视觉资产存量</th>
+                        <th>协作人数</th>
+                    </tr>
+                </thead>
+                <tbody id="dataTableBody">
+                    <tr><td colspan="5" style="text-align:center; padding: 40px; color:#86909c;">⏳ 正在读取云端节点数据...</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <script src="../js/app.js?v=9999"></script>
     <script>
-        let allLogs = [];
-        let myProjects = [];
-        let chartInstance = null;
+        let projectStats = [];
+        let barInstance = null;
         let pieInstance = null;
 
         window.onload = async () => {
-            // 🌟 修复 3：统一采用 window.cloudSupabase
             if (!window.cloudSupabase) {
-                document.getElementById('statsBody').innerHTML = `<tr><td colspan="5" style="text-align:center; color:red;">❌ 数据库未连接，请检查 app.js 路径。</td></tr>`;
+                document.getElementById('dataTableBody').innerHTML = `<tr><td colspan="5" style="text-align:center; color:#f53f3f; font-weight:bold;">❌ 数据库连接丢失，请检查 app.js 路径。</td></tr>`;
                 return;
             }
 
             try {
                 const { data: { user } } = await window.cloudSupabase.auth.getUser();
-                if (!user) {
-                    window.location.href = '../index.html';
-                    return;
-                }
+                if (!user) { window.location.href = '../index.html'; return; }
 
-                // 获取资源统计数据 (增加错误拦截)
-                const { data: statsData, error: statsErr } = await window.cloudSupabase.rpc('get_admin_resource_stats', { target_email: user.email });
-                if (statsErr) throw statsErr;
-                
-                // 兼容 RPC 返回格式 (无论它返回的是对象还是数组)
-                allLogs = statsData ? (statsData.usage_list || (Array.isArray(statsData) ? statsData : [])) : [];
+                // 🌟 直接穿透读取现有的数据库表，绝不拉空！
+                const { data: allProjects, error: err1 } = await window.cloudSupabase.from('shared_projects').select('*');
+                const { data: allMembers, error: err2 } = await window.cloudSupabase.from('project_members').select('*');
 
-                // 获取项目名称列表用于 Tab 和 表格名称映射
-                const { data: projs, error: projsErr } = await window.cloudSupabase.rpc('get_my_projects', { my_email: user.email });
-                if (projsErr) throw projsErr;
-                myProjects = projs || [];
+                if (err1) throw err1;
 
-                renderTabs();
-                filterByProject('all');
+                processDataAndRender(allProjects || [], allMembers || []);
+
             } catch (e) {
                 console.error("加载数据异常:", e);
-                document.getElementById('statsBody').innerHTML = `<tr><td colspan="5" style="text-align:center; color:red;">加载数据失败：${e.message}</td></tr>`;
+                document.getElementById('dataTableBody').innerHTML = `<tr><td colspan="5" style="text-align:center; color:#f53f3f;">数据读取失败：${e.message}</td></tr>`;
             }
         };
 
-        function renderTabs() {
-            const bar = document.getElementById('projectTabs');
-            bar.innerHTML = `<button class="btn btn-primary" id="tab_all" onclick="filterByProject('all')">全部项目</button>`;
-            myProjects.forEach(p => {
-                bar.innerHTML += `<button class="btn btn-outline" id="tab_${p.id}" onclick="filterByProject('${p.id}')">${p.name}</button>`;
+        function processDataAndRender(projects, members) {
+            let totalEps = 0;
+            let totalAssets = 0;
+            let assetDist = { characters: 0, scenes: 0, props: 0, effects: 0 };
+            
+            projectStats = [];
+
+            // 1. 解析每一个项目的 JSONB 节点数据
+            projects.forEach(p => {
+                let epCount = 0;
+                let aCount = 0;
+
+                // 解析分集数据
+                try {
+                    let pData = typeof p.data === 'string' ? JSON.parse(p.data) : (p.data || {});
+                    epCount = (pData.episodes || []).length;
+                    totalEps += epCount;
+                } catch(e){}
+
+                // 解析资产大盘数据
+                try {
+                    let pAssets = typeof p.assets === 'string' ? JSON.parse(p.assets) : (p.assets || {});
+                    if(pAssets.characters) { assetDist.characters += pAssets.characters.length; aCount += pAssets.characters.length; }
+                    if(pAssets.scenes) { assetDist.scenes += pAssets.scenes.length; aCount += pAssets.scenes.length; }
+                    if(pAssets.props) { assetDist.props += pAssets.props.length; aCount += pAssets.props.length; }
+                    if(pAssets.effects) { assetDist.effects += pAssets.effects.length; aCount += pAssets.effects.length; }
+                    totalAssets += aCount;
+                } catch(e){}
+
+                // 统计该项目的协作人数
+                const memberCount = members.filter(m => m.project_id === p.id).length;
+
+                projectStats.push({ 
+                    name: p.name, 
+                    owner: p.owner_email, 
+                    epCount: epCount, 
+                    aCount: aCount,
+                    memberCount: Math.max(1, memberCount) // 至少有主理人1个
+                });
             });
-        }
 
-        function filterByProject(projectId) {
-            // 按钮高亮切换逻辑
-            document.querySelectorAll('#projectTabs button').forEach(btn => btn.className = 'btn btn-outline');
-            const activeBtn = document.getElementById('tab_' + projectId);
-            if (activeBtn) activeBtn.className = 'btn btn-primary';
+            // 获取全站去重后的成员总数
+            const uniqueMembers = [...new Set(members.map(m => m.user_email))];
 
-            const filtered = projectId === 'all' ? allLogs : allLogs.filter(l => l.project_id === projectId);
-            renderTable(filtered);
-            renderCharts(filtered);
-        }
+            // 2. 渲染顶部指标
+            document.getElementById('m_projs').innerText = projects.length;
+            document.getElementById('m_eps').innerText = totalEps;
+            document.getElementById('m_assets').innerText = totalAssets;
+            document.getElementById('m_members').innerText = Math.max(1, uniqueMembers.length);
 
-        function renderTable(data) {
-            const body = document.getElementById('statsBody');
-            if (data.length === 0) {
-                body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 40px; color: #86909c;">暂无团队消耗数据</td></tr>';
-                return;
+            // 3. 渲染数据表格
+            const tbody = document.getElementById('dataTableBody');
+            if (projectStats.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 40px; color: #86909c;">暂无项目数据</td></tr>';
+            } else {
+                tbody.innerHTML = projectStats.map(p => `
+                    <tr>
+                        <td style="font-weight:600; color:#1d2129;">${p.name}</td>
+                        <td style="color:#4e5969;">${p.owner}</td>
+                        <td><span class="badge-ep">${p.epCount} 集</span></td>
+                        <td><span class="badge-ast">${p.aCount} 个</span></td>
+                        <td>${p.memberCount} 人</td>
+                    </tr>
+                `).join('');
             }
 
-            body.innerHTML = data.map(l => {
-                // 🌟 升级：将冰冷的 project_id 翻译成直观的项目名称
-                const proj = myProjects.find(p => p.id === l.project_id);
-                const projName = proj ? proj.name : l.project_id;
-                
-                return `
-                <tr>
-                    <td>${new Date(l.created_at).toLocaleString()}</td>
-                    <td>${l.user_email}</td>
-                    <td><span style="background:#f4f5f9; padding:2px 6px; border-radius:4px; font-size:12px;">${projName}</span></td>
-                    <td>${l.action_type}</td>
-                    <td style="font-weight:bold; color:#ff4d4f;">-${l.credits_spent} 💎</td>
-                </tr>
-            `}).join('');
+            // 4. 渲染数据可视化图表
+            renderCharts(projectStats, assetDist);
         }
 
-        function renderCharts(data) {
-            const ctx = document.getElementById('usageChart').getContext('2d');
-            const pieCtx = document.getElementById('pieChart').getContext('2d');
-
-            if (data.length === 0) {
-                if(chartInstance) chartInstance.destroy();
-                if(pieInstance) pieInstance.destroy();
-                return;
-            }
-
-            // 1. 成员消耗柱状图
-            const labels = [...new Set(data.map(l => l.user_email))];
-            const values = labels.map(u => data.filter(l => l.user_email === u).reduce((s, c) => s + (c.credits_spent || 0), 0));
-
-            if(chartInstance) chartInstance.destroy();
-            chartInstance = new Chart(ctx, {
+        function renderCharts(projStats, aDist) {
+            // -- 柱状图：项目规模 --
+            const barCtx = document.getElementById('barChart').getContext('2d');
+            if(barInstance) barInstance.destroy();
+            
+            barInstance = new Chart(barCtx, {
                 type: 'bar',
-                data: { labels, datasets: [{ label: '成员消耗总计 (💎)', data: values, backgroundColor: '#1677ff', borderRadius: 4 }] },
-                options: { responsive: true, maintainAspectRatio: false }
+                data: { 
+                    labels: projStats.map(p => p.name), 
+                    datasets: [{ 
+                        label: '分集数量 (集)', 
+                        data: projStats.map(p => p.epCount), 
+                        backgroundColor: '#1677ff', 
+                        borderRadius: 4,
+                        barThickness: 20
+                    }] 
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
             });
 
-            // 2. 行为动作饼图
-            const actionTypes = [...new Set(data.map(l => l.action_type))];
-            const actionValues = actionTypes.map(a => data.filter(l => l.action_type === a).reduce((s, c) => s + (c.credits_spent || 0), 0));
-
+            // -- 饼图：资产占比 --
+            const pieCtx = document.getElementById('pieChart').getContext('2d');
             if(pieInstance) pieInstance.destroy();
+
+            // 如果全是 0，为了图表好看，给个默认占位
+            const hasData = aDist.characters || aDist.scenes || aDist.props || aDist.effects;
+            const plotData = hasData ? 
+                [aDist.characters, aDist.scenes, aDist.props, aDist.effects] : 
+                [1, 1, 1, 1];
+
             pieInstance = new Chart(pieCtx, {
                 type: 'doughnut',
-                data: { labels: actionTypes, datasets: [{ data: actionValues, backgroundColor: ['#ff4d4f', '#722ed1', '#13c2c2', '#faad14', '#52c41a', '#eb2f96'] }] },
-                options: { responsive: true, maintainAspectRatio: false }
+                data: { 
+                    labels: ['人物', '场景', '道具', '特效'], 
+                    datasets: [{ 
+                        data: plotData, 
+                        backgroundColor: ['#1677ff', '#52c41a', '#faad14', '#722ed1'],
+                        borderWidth: 0
+                    }] 
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: { 
+                        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 12 } } },
+                        tooltip: { callbacks: { label: function(context) { return hasData ? ` ${context.raw} 个资产` : ` 暂无数据`; } } }
+                    }
+                }
             });
         }
 
+        // 🌟 报表导出功能
         function exportToExcel() {
-            if (allLogs.length === 0) return alert("没有可以导出的数据");
+            if (projectStats.length === 0) return alert("没有可以导出的数据");
             
-            // 格式化导出的字段，使 Excel 更加易读
-            const exportData = allLogs.map(l => {
-                const proj = myProjects.find(p => p.id === l.project_id);
-                return {
-                    "记录时间": new Date(l.created_at).toLocaleString(),
-                    "操作账号": l.user_email,
-                    "项目名称": proj ? proj.name : l.project_id,
-                    "操作类型": l.action_type,
-                    "消耗积分": l.credits_spent
-                };
-            });
+            const exportData = projectStats.map(p => ({
+                "剧组项目名称": p.name,
+                "主理人账号": p.owner,
+                "剧本分集数": p.epCount,
+                "已生成视觉资产": p.aCount,
+                "协作组员人数": p.memberCount
+            }));
+            
             const ws = XLSX.utils.json_to_sheet(exportData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "资源消耗日志");
-            XLSX.writeFile(wb, "AI导演团队消耗报表.xlsx");
+            XLSX.utils.book_append_sheet(wb, ws, "项目大盘数据");
+            XLSX.writeFile(wb, "AI导演工作站_团队资产报表.xlsx");
         }
     </script>
 </body>
