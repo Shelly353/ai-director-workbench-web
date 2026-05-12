@@ -1,14 +1,15 @@
-const API_BASE = "https://proxy-server-web.onrender.com";
+// 🌟 核心修复：将全局的 const/let 替换为 var，彻底免疫“重复声明”导致的致命崩溃！
+var API_BASE = "https://proxy-server-web.onrender.com";
 
 // ==========================================
 // 🌟 1. 全局云端 Supabase 初始化
 // ==========================================
-const cloudSupabase = window.supabase ? window.supabase.createClient('https://ywigafhbswrovuhvnkty.supabase.co', 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ') : null;
+var cloudSupabase = window.supabase ? window.supabase.createClient('https://ywigafhbswrovuhvnkty.supabase.co', 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ') : null;
 
 // ==========================================
 // 🌟 2. 核心：云端数据库引擎 (彻底替代 IndexedDB)
 // ==========================================
-const DB = {
+var DB = {
     init: async function() {
         console.log("☁️ AI 导演云端数据库已连接！");
     },
@@ -107,24 +108,18 @@ window.uploadMediaToCloud = async function(source, fileExt = 'png') {
 // ==========================================
 // 🌟 4. 全局 API 请求封装
 // ==========================================
-// 在 app.js 中替换原来的 apiRequest
 async function apiRequest(endpoint, body) {
     try {
         const baseURL = typeof API_BASE !== 'undefined' ? API_BASE : 'https://proxy-server-web.onrender.com';
         
         let validToken = "";
 
-        // 🌟 终极防弹逻辑：直接从 Supabase 获取当前最新、合法的 Token！
-        // 因为我们在 html 页面里已经定义了 supabaseClient，这里可以直接调用
         if (typeof supabaseClient !== 'undefined') {
             const { data: { session }, error } = await supabaseClient.auth.getSession();
             if (error || !session) throw new Error("本地登录已失效，请退出重新登录！");
             validToken = session.access_token;
-            
-            // 顺手把最新 token 塞回口袋更新一下
             localStorage.setItem('userToken', validToken); 
         } else {
-            // 如果没拿到 client，就作为备用从口袋里拿
             validToken = localStorage.getItem('userToken');
         }
         
@@ -132,7 +127,7 @@ async function apiRequest(endpoint, body) {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json', 
-                'Authorization': `Bearer ${validToken}` // 携带真 Token 闯关
+                'Authorization': `Bearer ${validToken}` 
             },
             body: JSON.stringify(body)
         });
@@ -149,7 +144,7 @@ async function apiRequest(endpoint, body) {
         throw e;
     }
 }
-// 底部日志打印功能
+
 function log(msg) {
     const consoleEl = document.getElementById('logConsole');
     if (consoleEl) {
@@ -159,8 +154,7 @@ function log(msg) {
     }
 }
 
-// 全局上传图片功能
-let fileUploadCallback = null;
+var fileUploadCallback = null;
 function triggerUpload(callback) {
     fileUploadCallback = callback;
     let uploader = document.getElementById('globalFileUploader');
@@ -189,15 +183,12 @@ function triggerUpload(callback) {
 // ==========================================
 // 💎 全局充值收银台模块
 // ==========================================
-
 window.showRechargeModal = function() {
-    // 如果已经存在，直接显示
     if (document.getElementById('rechargeModal')) {
         document.getElementById('rechargeModal').style.display = 'flex';
         return;
     }
 
-    // 动态生成优美的充值弹窗 UI
     const modalHTML = `
     <div id="rechargeModal" style="display:flex; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:99999; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
         <div style="background:#fff; width:400px; border-radius:12px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.2); font-family:sans-serif;">
@@ -245,13 +236,11 @@ window.showRechargeModal = function() {
                 <div id="qrCodeArea" style="display:none; margin-top:20px; text-align:center; padding-top:15px; border-top:1px dashed #e5e6eb;">
                     <div style="font-size:12px; color:#86909c; margin-bottom:10px;">请使用 <span id="qrPayName" style="color:var(--primary); font-weight:bold;">支付工具</span> 扫码付款</div>
                     <img id="qrCodeImg" src="" style="width:150px; height:150px; border:1px solid #eee; border-radius:8px; padding:5px;">
-
-          //模拟付款只在测试时使用，上线后删除。          
+         
                     <div style="margin-top:15px;">
                         <button class="btn btn-primary" onclick="mockPaymentSuccess()" style="width:100%; padding:10px; border-radius:20px;">🧪 (测试通道) 模拟付款成功</button>
                     </div>
                 </div>
-          //模拟付款只在测试时使用，上线后删除。  
         
                 <button id="btnCreateOrder" class="btn btn-primary" style="width:100%; margin-top:20px; padding:12px; font-size:14px; border-radius:8px;" onclick="initiatePayment()">立即充值</button>
             </div>
@@ -260,7 +249,6 @@ window.showRechargeModal = function() {
 
     document.body.insertAdjacentHTML('beforeend', modalHTML);
 
-    // 为单选框添加简单的选中样式切换
     const radios = document.querySelectorAll('input[name="payPkg"]');
     radios.forEach(r => {
         r.addEventListener('change', function() {
@@ -271,7 +259,6 @@ window.showRechargeModal = function() {
     });
 };
 
-// 当前选中的支付方式 (默认支付宝)
 window.currentPayMethod = 'alipay';
 window.currentOrderId = null;
 
@@ -310,17 +297,14 @@ window.initiatePayment = async function() {
 window.mockPaymentSuccess = async function() {
     if(!window.currentOrderId) return;
     try {
-        // 调用我们预留的模拟回调接口
         const res = await apiRequest('/api/pay/mock-success', { orderId: window.currentOrderId });
         if(res.success) {
             alert(`🎉 充值成功！您的最新积分为: ${res.newCredits} 💎`);
             document.getElementById('rechargeModal').style.display = 'none';
-            // 刷新页面顶部的积分显示
             const headerCredit = document.getElementById('headerCredit');
             if(headerCredit) headerCredit.innerText = `💎 ${res.newCredits}`;
             localStorage.setItem('userCredits', res.newCredits);
             
-            // 恢复弹窗初始状态，方便下次点开
             document.getElementById('btnCreateOrder').style.display = 'block';
             document.getElementById('btnCreateOrder').disabled = false;
             document.getElementById('btnCreateOrder').innerText = '立即充值';
