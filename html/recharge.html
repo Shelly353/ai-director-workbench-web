@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 导演工作站 - 获取算力积分</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode_js@1.0.0/qrcode.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; background: #f4f5f9; font-family: -apple-system, system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .checkout-box { background: #fff; width: 420px; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.08); padding: 30px; box-sizing: border-box; }
+        .title { text-align: center; font-size: 20px; font-weight: 800; color: #1d2129; margin-bottom: 25px; }
+        
+        /* 套餐选择 */
+        .pkg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+        .pkg-card { border: 2px solid #e5e6eb; border-radius: 10px; padding: 15px; text-align: center; cursor: pointer; transition: 0.2s; position: relative; }
+        .pkg-card:hover { border-color: #bcdcff; background: #f8fbff; }
+        .pkg-card.active { border-color: #1677ff; background: #e8f3ff; }
+        .pkg-card.active::after { content: '✓'; position: absolute; top: -10px; right: -10px; background: #1677ff; color: #fff; width: 20px; height: 20px; border-radius: 50%; font-size: 12px; line-height: 20px; }
+        .pkg-credits { font-size: 20px; font-weight: 800; color: #1d2129; margin-bottom: 5px; }
+        .pkg-price { font-size: 14px; color: #86909c; }
+
+        /* 支付方式 */
+        .pay-methods { display: flex; gap: 15px; margin-bottom: 25px; }
+        .method-btn { flex: 1; padding: 12px; border: 1px solid #e5e6eb; border-radius: 8px; font-size: 14px; font-weight: bold; background: #fff; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; transition: 0.2s; }
+        .method-btn.wechat { color: #00b42a; }
+        .method-btn.alipay { color: #1677ff; }
+        .method-btn.active { border-width: 2px; }
+        .method-btn.wechat.active { border-color: #00b42a; background: #f6ffed; }
+        .method-btn.alipay.active { border-color: #1677ff; background: #e8f3ff; }
+
+        /* 二维码区域 */
+        .qr-section { text-align: center; padding: 20px; border: 1px dashed #dcdfe6; border-radius: 12px; background: #fafafa; display: none; }
+        #qrcode { display: flex; justify-content: center; margin: 15px 0; }
+        .qr-tip { font-size: 13px; color: #86909c; margin-bottom: 10px; }
+
+        .btn-submit { width: 100%; padding: 14px; background: #1677ff; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-submit:disabled { background: #94bfff; cursor: not-allowed; }
+        
+        .success-overlay { display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .success-overlay h2 { color: #00b42a; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="checkout-box">
+        <div id="paymentFlow">
+            <div class="title">💎 获取算力积分</div>
+            
+            <div class="pkg-grid">
+                <div class="pkg-card active" onclick="selectPkg('pkg_1', 9.9)">
+                    <div class="pkg-credits">100 积分</div>
+                    <div class="pkg-price">￥9.9</div>
+                </div>
+                <div class="pkg-card" onclick="selectPkg('pkg_2', 39.9)">
+                    <div class="pkg-credits">500 积分</div>
+                    <div class="pkg-price">￥39.9</div>
+                </div>
+                <div class="pkg-card" onclick="selectPkg('pkg_3', 69.9)">
+                    <div class="pkg-credits">1000 积分</div>
+                    <div class="pkg-price">￥69.9</div>
+                </div>
+                <div class="pkg-card" onclick="selectPkg('pkg_4', 299.9)">
+                    <div class="pkg-credits">5000 积分</div>
+                    <div class="pkg-price">￥299.9</div>
+                </div>
+            </div>
+
+            <div class="pay-methods">
+                <button class="method-btn wechat active" onclick="selectMethod('wechat')">🟢 微信支付</button>
+                <button class="method-btn alipay" onclick="selectMethod('alipay')">🔵 支付宝</button>
+            </div>
+
+            <button id="btnCreateOrder" class="btn-submit" onclick="createOrder()">立即充值 ￥9.9</button>
+
+            <div id="qrSection" class="qr-section">
+                <div class="qr-tip" id="qrTip">请使用微信扫一扫支付</div>
+                <div id="qrcode"></div>
+                <div style="font-size: 12px; color: #f53f3f; font-weight: bold; margin-top: 10px;">
+                    (测试阶段：扫码后请点击下方模拟支付成功)
+                </div>
+                <button onclick="mockUserPaid()" style="margin-top:10px; padding:6px 12px; background:#f53f3f; color:#fff; border:none; border-radius:4px; cursor:pointer;">
+                    [测试] 模拟客户手机支付成功
+                </button>
+            </div>
+        </div>
+
+        <div id="successFlow" class="success-overlay">
+            <div style="font-size: 60px;">🎉</div>
+            <h2>支付成功！</h2>
+            <p style="color: #4e5969; font-size: 14px;">积分已到账，您可以关闭此窗口并继续创作。</p>
+            <button class="btn-submit" style="margin-top: 20px;" onclick="window.close()">完成并关闭</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "https://proxy-server-web.onrender.com"; 
+        let currentPkg = 'pkg_1';
+        let currentMethod = 'wechat';
+        let currentOrderId = null;
+        let pollTimer = null;
+
+        function selectPkg(pkgId, price) {
+            currentPkg = pkgId;
+            document.querySelectorAll('.pkg-card').forEach(el => el.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            document.getElementById('btnCreateOrder').innerText = `立即充值 ￥${price}`;
+        }
+
+        function selectMethod(method) {
+            currentMethod = method;
+            document.querySelectorAll('.method-btn').forEach(el => el.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+        }
+
+        async function createOrder() {
+            const token = localStorage.getItem('userToken');
+            if (!token) return alert("身份失效，请重新登录");
+
+            document.getElementById('btnCreateOrder').disabled = true;
+            document.getElementById('btnCreateOrder').innerText = "正在获取安全支付码...";
+
+            try {
+                const res = await fetch(`${API_BASE}/api/pay/create-order`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ packageId: currentPkg, payMethod: currentMethod })
+                });
+                
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || "创建订单失败");
+
+                currentOrderId = data.orderId;
+                
+                // 隐藏按钮，展示二维码区域
+                document.getElementById('btnCreateOrder').style.display = 'none';
+                document.getElementById('qrSection').style.display = 'block';
+                document.getElementById('qrTip').innerText = currentMethod === 'wechat' ? '🟢 请使用微信扫一扫支付' : '🔵 请使用支付宝扫一扫支付';
+
+                // 生成真实的支付二维码
+                document.getElementById('qrcode').innerHTML = "";
+                new QRCode(document.getElementById('qrcode'), {
+                    text: data.qrCodeData, // 微信或支付宝返回的真实唤起链接
+                    width: 180,
+                    height: 180,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff"
+                });
+
+                // 开启轮询，等待用户扫码付款
+                startPolling();
+
+            } catch (e) {
+                alert(e.message);
+                document.getElementById('btnCreateOrder').disabled = false;
+                document.getElementById('btnCreateOrder').innerText = "重新尝试获取";
+            }
+        }
+
+        function startPolling() {
+            const token = localStorage.getItem('userToken');
+            pollTimer = setInterval(async () => {
+                try {
+                    const res = await fetch(`${API_BASE}/api/pay/status/${currentOrderId}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const data = await res.json();
+                    
+                    // 如果后端发现订单状态变成了 success (Webhook已经处理完)
+                    if (data.status === 'success') {
+                        clearInterval(pollTimer);
+                        localStorage.setItem('userCredits', data.newCredits); // 更新本地缓存
+                        
+                        // 通知父窗口更新顶部的积分展示（如果是弹窗形式）
+                        if (window.opener && !window.opener.closed) {
+                            const creditEl = window.opener.document.getElementById('headerCredit');
+                            if(creditEl) creditEl.innerText = `💎 积分: ${data.newCredits}`;
+                        }
+
+                        // 显示成功页面
+                        document.getElementById('paymentFlow').style.display = 'none';
+                        document.getElementById('successFlow').style.display = 'flex';
+                    }
+                } catch (e) { console.error("轮询异常:", e); }
+            }, 3000); // 每 3 秒问一次后端
+        }
+
+        // [测试后门]：为了现在能跑通，提供一个模拟触发回调的按钮
+        async function mockUserPaid() {
+            if(!currentOrderId) return;
+            const token = localStorage.getItem('userToken');
+            await fetch(`${API_BASE}/api/pay/mock-trigger-webhook`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ orderId: currentOrderId })
+            });
+            // 触发后，后端的订单状态会变成 success，上面的轮询（startPolling）会自动检测到并跳转成功页。
+        }
+    </script>
+</body>
+</html>
