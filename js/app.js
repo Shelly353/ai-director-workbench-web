@@ -23,20 +23,20 @@ var DB = {
         return null;
     },
 
-    get: async function(key) {
+get: async function(key) {
         const userId = await this._getUid();
         if (!userId || !window.cloudSupabase) return null;
         
-        // 🌟 终极修复：使用 limit(1) 取代 single()，彻底消灭 406 报错！
+        // 🌟 终极杀招：换成 maybeSingle()，找不到数据时安静返回 null，彻底消灭 406 报错红字！
         const { data, error } = await window.cloudSupabase
             .from('cloud_kv_store')
             .select('data_value')
             .eq('user_id', userId)
             .eq('data_key', key)
-            .limit(1);
+            .maybeSingle(); 
             
-        if (error || !data || data.length === 0) return null;
-        return data[0].data_value;
+        if (error || !data) return null;
+        return data.data_value;
     },
 
     set: async function(key, value) {
