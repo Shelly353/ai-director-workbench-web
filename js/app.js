@@ -1,30 +1,22 @@
-// 🌟 核心修复：将全局的 const/let 替换为 var，彻底免疫“重复声明”导致的致命崩溃！
 var API_BASE = "https://proxy-server-web.onrender.com";
 
-// ==========================================
-// 🌟 1. 全局云端 Supabase 初始化
-// ==========================================
-var cloudSupabase = window.supabase ? window.supabase.createClient('https://ywigafhbswrovuhvnkty.supabase.co', 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ') : null;
+// 🌟 核心修复 1：把公钥光明正大地写在前端，这是唯一正确的做法，并通过 window 暴露给所有 HTML
+window.cloudSupabase = window.supabase ? window.supabase.createClient('https://ywigafhbswrovuhvnkty.supabase.co', 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ') : null;
 
-// ==========================================
-// 🌟 2. 核心：云端数据库引擎 (具备身份自动愈合能力)
-// ==========================================
 var DB = {
     init: async function() {
         console.log("☁️ AI 导演云端数据库已连接！");
     },
     
-    // 🌟 新增内部方法：智能获取用户ID，防丢失
     _getUid: async function() {
         let uid = localStorage.getItem('userId');
-        if (uid) return uid;
+        if (uid && uid !== "undefined") return uid;
         
-        // 如果本地没有，尝试通过 Supabase 的底层 Session 恢复
-        if (typeof cloudSupabase !== 'undefined' && cloudSupabase) {
-            const { data } = await cloudSupabase.auth.getSession();
+        if (window.cloudSupabase) {
+            const { data } = await window.cloudSupabase.auth.getSession();
             if (data && data.session && data.session.user) {
                 const recoveredId = data.session.user.id;
-                localStorage.setItem('userId', recoveredId); // 重新存入本地
+                localStorage.setItem('userId', recoveredId);
                 return recoveredId;
             }
         }
@@ -33,44 +25,32 @@ var DB = {
 
     get: async function(key) {
         const userId = await this._getUid();
-        if (!userId || typeof cloudSupabase === 'undefined' || !cloudSupabase) return null;
+        if (!userId || !window.cloudSupabase) return null;
         
-        const { data, error } = await cloudSupabase
-            .from('cloud_kv_store')
-            .select('data_value')
-            .eq('user_id', userId)
-            .eq('data_key', key)
-            .single();
-            
+        const { data, error } = await window.cloudSupabase.from('cloud_kv_store').select('data_value').eq('user_id', userId).eq('data_key', key).single();
         if (error || !data) return null;
         return data.data_value;
     },
 
     set: async function(key, value) {
         const userId = await this._getUid();
-        if (!userId || typeof cloudSupabase === 'undefined' || !cloudSupabase) {
-            console.warn("⚠️ 拦截保存：用户未登录或身份令牌丢失");
+        if (!userId || !window.cloudSupabase) {
+            console.warn("⚠️ 拦截保存：未检测到身份");
             return;
         }
         
-        const { error } = await cloudSupabase
-            .from('cloud_kv_store')
-            .upsert(
-                { user_id: userId, data_key: key, data_value: value, updated_at: new Date() }, 
-                { onConflict: 'user_id, data_key' }
-            );
-            
-        if (error) {
-            console.error("❌ 云端保存失败:", error);
-        } else {
-            console.log(`✅ [${key}] 成功同步至云端！`);
-        }
+        const { error } = await window.cloudSupabase.from('cloud_kv_store').upsert(
+            { user_id: userId, data_key: key, data_value: value, updated_at: new Date() }, 
+            { onConflict: 'user_id, data_key' }
+        );
+        if (error) console.error("❌ 云端保存失败:", error);
+        else console.log(`✅ [${key}] 同步成功`);
     },
 
     remove: async function(key) {
         const userId = await this._getUid();
-        if (!userId || typeof cloudSupabase === 'undefined' || !cloudSupabase) return;
-        await cloudSupabase.from('cloud_kv_store').delete().eq('user_id', userId).eq('data_key', key);
+        if (!userId || !window.cloudSupabase) return;
+        await window.cloudSupabase.from('cloud_kv_store').delete().eq('user_id', userId).eq('data_key', key);
     }
 };
 
