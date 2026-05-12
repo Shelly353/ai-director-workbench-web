@@ -27,9 +27,16 @@ var DB = {
         const userId = await this._getUid();
         if (!userId || !window.cloudSupabase) return null;
         
-        const { data, error } = await window.cloudSupabase.from('cloud_kv_store').select('data_value').eq('user_id', userId).eq('data_key', key).single();
-        if (error || !data) return null;
-        return data.data_value;
+        // 🌟 终极杀招：使用 .limit(1) 取代 .single()，即使没有数据也会返回 200 OK 的空数组，绝不报 406！
+        const { data, error } = await window.cloudSupabase
+            .from('cloud_kv_store')
+            .select('data_value')
+            .eq('user_id', userId)
+            .eq('data_key', key)
+            .limit(1);
+            
+        if (error || !data || data.length === 0) return null;
+        return data[0].data_value;
     },
 
     set: async function(key, value) {
