@@ -3,24 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <title>AI 独立生图控制台</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-/* 🌟 新增：底部折叠控制台样式 */
-        .console-wrapper { position: fixed; bottom: 0; left: 0; width: 100%; background: #1e1e1e; z-index: 9000; transition: transform 0.3s ease; transform: translateY(calc(100% - 30px)); border-top: 1px solid #444; }
+        .credit-badge { background: #fff5f5; color: #ff6b6b; padding: 4px 10px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 12px; }
+        
+        .console-wrapper { 
+            position: fixed; bottom: 0; left: 0; width: 100%; background: #1e1e1e; 
+            z-index: 9999; transition: transform 0.3s ease; 
+            transform: translateY(calc(100% - 30px)); border-top: 1px solid #444; 
+        }
         .console-wrapper.open { transform: translateY(0); }
         .console-header { height: 30px; background: #2d2d2d; color: #ccc; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-size: 11px; cursor: pointer; user-select: none; }
         .console-header:hover { background: #3d3d3d; color: #fff; }
         .console-content { height: 120px; padding: 10px 20px; color: #4af626; font-family: 'Consolas', monospace; font-size: 11px; overflow-y: auto; box-sizing: border-box; white-space: pre-wrap; border-top: 1px solid #333; }
 
         body { background: #f2f3f5; margin: 0; padding: 20px; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; }
+        
         .toolbar { background: #fff; padding: 15px 20px; border-radius: 10px; display: flex; gap: 15px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; flex-shrink: 0; }
         .toolbar select { padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc; outline: none; }
         
         .main-workspace { display: flex; gap: 20px; flex: 1; min-height: 0; }
         
-        /* 左侧：参考资产与输入 */
         .left-panel { flex: 1; display: flex; flex-direction: column; gap: 15px; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow-y: auto; }
-        
         .ref-section { border: 1px dashed #dcdfe6; border-radius: 8px; padding: 15px; background: #fafafa; }
         .ref-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
         .ref-item { position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; border: 1px solid #eee; }
@@ -32,7 +40,6 @@
         .inline-pill { display: inline-flex; align-items: center; background: #e8f3ff; border: 1px solid #bcdcff; border-radius: 4px; padding: 2px 8px; margin: 0 4px; font-size: 12px; color: var(--primary); cursor: default; }
         .inline-pill img { width: 18px; height: 18px; object-fit: cover; border-radius: 2px; margin-right: 4px; }
         
-        /* 右侧：结果展示 */
         .right-panel { width: 45%; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; flex-direction: column; overflow: hidden; }
         .result-img-box { flex: 1; background: #1e1e1e; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; }
         .result-img-box img { max-width: 100%; max-height: 100%; object-fit: contain; display: none; }
@@ -46,7 +53,6 @@
         .btn-success { background: #00b42a; color: #fff; }
         .btn:disabled { background: #e5e6eb; color: #86909c; cursor: not-allowed; border-color: transparent; }
 
-        /* 全局资产选择浮层 */
         #globalAssetModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
         #globalAssetContent { background: #fff; width: 80%; height: 80%; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; }
         #globalAssetGrid { display: flex; flex-wrap: wrap; gap: 15px; overflow-y: auto; flex: 1; margin-top: 15px; }
@@ -56,26 +62,16 @@
 </head>
 <body>
 
-<div class="console-wrapper" id="consoleWrapper">
-        <div class="console-header" onclick="toggleConsole()">
-            <span>📝 实时运行日志 (调试模式)</span>
-            <span id="consoleToggleIcon">▲ 点击展开</span>
-        </div>
-        <div class="console-content" id="logConsole"></div>
-    </div>
-
     <div class="toolbar">
         <strong style="font-size: 16px;">🎨 高级生图工作台</strong>
         <span style="color: #86909c; font-size: 12px; margin-right: auto;" id="rowIdDisplay"></span>
         
-        <label style="font-size: 12px; font-weight: bold;">模型:</label>
         <select id="modelSelect">
             <option value="wan2.7-image">Wan2.7 Image</option>
             <option value="doubao-seedream-5.0-lite">Doubao Seedream</option>
             <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash</option>
         </select>
         
-        <label style="font-size: 12px; font-weight: bold;">比例:</label>
         <select id="ratioSelect">
             <option value="16:9">16:9</option>
             <option value="9:16">9:16</option>
@@ -83,6 +79,14 @@
             <option value="1:1">1:1</option>
             <option value="4:3">4:3</option>
         </select>
+        
+        <label style="font-size: 12px; font-weight: bold; margin-left: 10px;">分辨率:</label>
+        <select id="resolutionSelect">
+            <option value="1K">1K (标准)</option>
+            <option value="2K">2K (高清)</option>
+            <option value="4K">4K (超清)</option>
+        </select>
+        <span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
     </div>
 
     <div class="main-workspace">
@@ -91,7 +95,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <span style="font-size: 13px; font-weight: bold;">📚 参考资产池 (输入 @ 即可调用)</span>
                     <div style="display: flex; gap: 10px;">
-                        <button class="btn btn-outline" onclick="openGlobalAssetModal()">+ 导入全局资产</button>
+                        <button class="btn btn-outline" onclick="openGlobalAssetModal()">+ 导入全局云端资产</button>
                         <button class="btn btn-outline" onclick="document.getElementById('localUploader').click()">+ 本地上传</button>
                         <input type="file" id="localUploader" accept="image/*" style="display:none;" onchange="handleLocalUpload(event)">
                     </div>
@@ -123,7 +127,7 @@
     <div id="globalAssetModal">
         <div id="globalAssetContent">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:10px;">
-                <h3 style="margin:0;">选择要导入的全局资产</h3>
+                <h3 style="margin:0;">选择要导入的云端资产</h3>
                 <span style="cursor:pointer; font-size:24px;" onclick="document.getElementById('globalAssetModal').style.display='none'">×</span>
             </div>
             <div id="globalAssetGrid"></div>
@@ -131,10 +135,56 @@
     </div>
 
     <div id="mentionMenu"><div id="mentionMenuGrid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px;"></div></div>
+    
+    <div class="console-wrapper" id="consoleWrapper">
+        <div class="console-header" onclick="toggleConsole()">
+            <span>📝 实时运行日志 (调试模式)</span>
+            <span id="consoleToggleIcon">▲ 点击展开</span>
+        </div>
+        <div class="console-content" id="logConsole"></div>
+    </div>
 
-    <script src="../js/app.js"></script>
+    <script src="../js/app.js?v=9999"></script>
     <script>
-// 🌟 1. 基础控制函数
+        // ==========================================
+        // 🌟 彻底清除自己创建的 supabaseClient，统一使用 window.cloudSupabase
+        // ==========================================
+
+        async function fetchCredits() {
+            const userId = localStorage.getItem('userId');
+            if (!userId || !window.cloudSupabase) return;
+            try {
+                const { data } = await window.cloudSupabase.from('profiles').select('credits').eq('user_id', userId).single();
+                if (data) {
+                    document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
+                    localStorage.setItem('userCredits', data.credits);
+                }
+            } catch (e) { console.error("获取积分失败:", e); }
+        }
+
+        async function checkAndDeductCredits(actionKey, modelName) {
+            const isGemini = modelName.toLowerCase().includes('gemini');
+            if (!window.cloudSupabase) return false;
+
+            const { data: newCredits, error } = await window.cloudSupabase.rpc('deduct_credits_v2', { 
+                action_key: actionKey, 
+                is_gemini: isGemini 
+            });
+
+            if (error) {
+                alert(`❌ 操作失败：${error.message}`);
+                return false;
+            }
+
+            document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
+            localStorage.setItem('userCredits', newCredits);
+            log(`💎 扣费成功，剩余 ${newCredits} 💎。`);
+            return true;
+        }
+
+        // ==========================================
+        // UI 与生图控制逻辑
+        // ==========================================
         function toggleConsole() {
             const wrapper = document.getElementById('consoleWrapper');
             const icon = document.getElementById('consoleToggleIcon');
@@ -151,155 +201,6 @@
             }
         }
 
-        // 🌟 2. 深度埋点的生图函数
-        async function generateImage() {
-            const modelSelect = document.getElementById('modelSelect');
-            const selectedModel = modelSelect.value;
-            const ratioVal = document.getElementById('ratioSelect').value;
-            const inputEl = document.getElementById('promptInput');
-            
-            let rawText = "";
-            let inlineImgs = [];
-            
-            log(`▶️ 启动生图流程，目标模型: ${selectedModel}`);
-
-            // 解析富文本
-            inputEl.childNodes.forEach(node => {
-                if (node.nodeType === Node.TEXT_NODE) rawText += node.textContent;
-                else if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('inline-pill')) {
-                    inlineImgs.push(node.getAttribute('data-b64'));
-                    rawText += ` [参考图${inlineImgs.length}: ${node.innerText}] `;
-                }
-            });
-
-            // 分辨率适配逻辑
-            let sizeVal = "";
-            if (selectedModel.includes('doubao')) {
-                sizeVal = ratioVal === "9:16" ? "1440*2560" : (ratioVal === "1:1" ? "2048*2048" : "2560*1440");
-            } else {
-                sizeVal = ratioVal === "9:16" ? "720*1280" : (ratioVal === "1:1" ? "1024*1024" : "1280*720");
-            }
-            
-            log(`📐 适配分辨率: ${sizeVal}, 比例: ${ratioVal}`);
-            log(`🖼️ 携带参考图数量: ${inlineImgs.length}`);
-
-            const btn = document.getElementById('btnGenerate');
-            const status = document.getElementById('resultStatus');
-            btn.disabled = true;
-            clearResult();
-
-           try {
-                const res = await apiRequest('/api/image/create', { 
-                    model: selectedModel, 
-                    prompt: finalPrompt, 
-                    images: inlineImgs, 
-                    ratio: ratioVal, 
-                    size: sizeVal,
-                    async_mode: true  // 🌟 关键暗号：告诉后端我要拿小票，不要让我等
-                });
-
-                let b64 = "";
-
-                // 🌟 新增：处理阿里云 Wan2.7 的异步轮询 (彻底告别 120 秒超时)
-                if (res.taskId) {
-                    log(`✅ 成功提交至云端排队，获得小票 TaskID: ${res.taskId}`);
-                    log(`🔄 启动前端轮询模式，安全监控画图进度...`);
-                    
-                    while (true) {
-                        // 每隔 3.5 秒问一次，完全不会超时
-                        await new Promise(resolve => setTimeout(resolve, 3500));
-                        
-                        // 🌟 补丁 1：强制加上 Render 后端的绝对地址（请替换为您的真实地址！）
-                        // ⚠️ 注意：把下面这行换成您 app.js 里面真实可用的那个 Render 地址
-                        const myRealURL = "https://proxy-server-us-it0u.onrender.com"; 
-                        
-                        const pollRes = await fetch(`${myRealURL}/api/dashscope/poll/${res.taskId}`, {
-                            method: 'GET',
-                            headers: { 'x-access-code': 'dajingdongqu' }
-                        });
-                        
-                        if (!pollRes.ok) throw new Error(`轮询请求失败 HTTP ${pollRes.status}`);
-                        const pollData = await pollRes.json();
-                        const taskStatus = pollData.output?.task_status || pollData.task_status;
-                        
-                        if (taskStatus === 'SUCCEEDED') {
-                            // 🌟 补丁 2：同步全兼容数据解析逻辑（防止 undefined 和 choices 报错）
-                            const out = pollData.output || {};
-                            if (out.results && out.results.length > 0) {
-                                b64 = out.results[0].url || out.results[0].image_url;
-                            } else if (out.choices && out.choices[0]?.message?.content) {
-                                const content = out.choices[0].message.content;
-                                const imgItem = Array.isArray(content) ? content.find(c => c.image || c.url) : null;
-                                if (imgItem) b64 = imgItem.image || imgItem.url;
-                                else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
-                            } else if (out.image_url) {
-                                b64 = out.image_url;
-                            } else if (out.image) {
-                                b64 = out.image;
-                            }
-                            
-                            if (!b64) {
-                                console.error("无法解析完整的云端返回数据:", pollData);
-                                throw new Error("云端已完成，但提取图片链接失败");
-                            }
-                            
-                            log(`✅ 阿里云生图完成！`);
-                            break;
-                        } else if (taskStatus === 'FAILED') {
-                            throw new Error(`阿里云生图失败: ${pollData.output?.message || pollData.message}`);
-                        } else {
-                            log(`⏳ 云端绘制中，当前状态: ${taskStatus}...`);
-                        }
-                    }
-                } else if (res.data && res.data.length > 0) {
-                    // 同步模型 (Doubao, Gemini) 直接拿结果
-                    b64 = res.data[0].url;
-                    log(`✅ 获得同步生图链接。`);
-                } else {
-                    throw new Error("返回数据异常：未包含图片地址或 TaskID");
-                }
-
-                const imgEl = document.getElementById('resultImg'); 
-                
-                // --- 代理跨域下载 ---
-                if (b64.startsWith('http')) {
-                    status.innerText = "📥 AI 绘制完毕，正在安全下载图片...";
-                    try {
-                        const imgRes = await fetch(b64);
-                        if (!imgRes.ok) throw new Error("CORS Blocked");
-                        const blob = await imgRes.blob();
-                        b64 = await new Promise(r => { const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob); });
-                    } catch (corsErr) {
-                        log("⚠️ 跨域拦截，启动后端代理...");
-                        const proxyRes = await apiRequest('/api/proxy-image', { url: b64 });
-                        if (proxyRes.base64) b64 = proxyRes.base64;
-                        else throw new Error("代理下载图片失败");
-                    }
-                }
-
-                generatedB64 = b64;
-                imgEl.src = b64; 
-                
-                imgEl.onload = () => {
-                    status.style.display = 'none';
-                    imgEl.style.display = 'block';
-                };
-
-                document.getElementById('btnConfirm').style.display = 'block';
-                document.getElementById('btnDownload').style.display = 'block';
-                document.getElementById('btnDelete').style.display = 'block';
-                
-            } catch (e) {
-                // ... 下面的 catch 保持不变
-                log(`❌ 发生错误: ${e.message}`);
-                status.innerText = `❌ 生图失败: ${e.message}`;
-                // 自动展开控制台以便用户查看报错细节
-                document.getElementById('consoleWrapper').classList.add('open');
-            } finally {
-                btn.disabled = false;
-            }
-        }
-        // 与 index.html 保持一致的风格库
         const STYLE_MODIFIERS = {
             "realistic": "Award-winning photography, photorealistic portrait, highly detailed skin texture, 2k resolution, cinematic lighting, shot on 35mm lens, realistic human skin. ",
             "anime": "Anime style, 2D flat shading, cel shaded, anime character design. ",
@@ -309,62 +210,95 @@
         };
 
         let rowId = new URLSearchParams(window.location.search).get('rowId');
-        let localRefPool = []; // 本次生图专属的参考图池
-        let globalExtractedData = null;
+        let localRefPool = []; 
         let globalStyle = null;
         let savedRange = null;
         let generatedB64 = null;
 
         window.onload = async () => {
+            const userId = localStorage.getItem('userId');
+            if (!userId) { window.location.replace('index.html'); return; }
+
+            await fetchCredits();
             document.getElementById('rowIdDisplay').innerText = `目标分镜: ${rowId || '未知'}`;
             
-            // 读取全局配置
-            globalExtractedData = await DB.get('extractedData') || {};
             globalStyle = await DB.get('styleSelect');
-            
             const savedRatio = await DB.get('globalRatio');
             if(savedRatio) document.getElementById('ratioSelect').value = savedRatio;
             
             const imgConfig = await DB.get('image_config');
             if(imgConfig && imgConfig.model) document.getElementById('modelSelect').value = imgConfig.model;
 
-            // 监听富文本 @ 输入
             document.getElementById('promptInput').addEventListener('input', handleRichInput);
             renderRefGrid();
         };
 
-        // --- 参考资产管理 ---
-        function openGlobalAssetModal() {
-            let pool = [];
-            const add = (n,b) => { if(b && !pool.find(x=>x.b64===b)) pool.push({name:n, b64:b}); };
-            
-            ['characters', 'props', 'effects'].forEach(cat => {
-                if(globalExtractedData[cat]) globalExtractedData[cat].forEach(x => { add(x.name, x.img); if(x.refImages) x.refImages.forEach(r=>add(x.name+'-参考', r)); });
-            });
-            if(globalExtractedData.scenes) globalExtractedData.scenes.forEach(s => { add(s.name+'-正', s.forwardImg); add(s.name+'-反', s.reverseImg); if(s.refImages) s.refImages.forEach(r=>add(s.name+'-参考', r)); });
-
-            document.getElementById('globalAssetGrid').innerHTML = pool.map(item => `
-                <div style="width:100px; cursor:pointer; text-align:center; padding:5px; border:2px solid transparent; border-radius:8px;" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'" onclick="addRefToPool('${item.name}', '${item.b64}')">
-                    <img src="${item.b64}" style="width:100%; height:100px; object-fit:cover; border-radius:6px;">
-                    <div style="font-size:11px; margin-top:5px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${item.name}</div>
-                </div>
-            `).join('');
-            
+        // --- 🌟 核心升级：实时云端拉取共享与私有资产 ---
+        async function openGlobalAssetModal() {
+            const grid = document.getElementById('globalAssetGrid');
+            grid.innerHTML = "<div style='width:100%; text-align:center; padding:40px; color:#86909c;'>⏳ 正在从云端拉取资产...</div>";
             document.getElementById('globalAssetModal').style.display = 'flex';
+
+            try {
+                const ctx = await DB.get('active_context');
+                if (!ctx || !ctx.projectId) throw new Error("无法识别当前项目归属！");
+                
+                const { data: { user } } = await window.cloudSupabase.auth.getUser();
+                let pool = [];
+
+                // 1. 获取共享大盘资产
+                const { data: sharedData } = await window.cloudSupabase.from('shared_projects').select('assets').eq('id', ctx.projectId).single();
+                if (sharedData && sharedData.assets) {
+                    let ast = typeof sharedData.assets === 'string' ? JSON.parse(sharedData.assets) : sharedData.assets;
+                    ['characters', 'props', 'effects'].forEach(c => {
+                        if(ast[c]) ast[c].forEach(x => { 
+                            if(x.img) pool.push({name: x.name, b64: x.img, label: '共享资产'}); 
+                            if(x.refImages) x.refImages.forEach(r => pool.push({name: x.name+'-参考', b64: r, label: '共享资产'})); 
+                        });
+                    });
+                    if(ast.scenes) ast.scenes.forEach(s => { 
+                        if(s.forwardImg) pool.push({name: s.name+'-正视', b64: s.forwardImg, label: '共享场景'});
+                        if(s.reverseImg) pool.push({name: s.name+'-反打', b64: s.reverseImg, label: '共享场景'});
+                        if(s.refImages) s.refImages.forEach(r => pool.push({name: s.name+'-参考', b64: r, label: '共享场景'}));
+                    });
+                }
+
+                // 2. 获取私有关键帧
+                const { data: privateData } = await window.cloudSupabase.from('private_keyframes')
+                    .select('img_url')
+                    .eq('project_id', ctx.projectId)
+                    .eq('user_email', user.email);
+                
+                if (privateData) {
+                    privateData.forEach((k, i) => pool.push({ name: `私有图片 ${i+1}`, b64: k.img_url, label: '私有' }));
+                }
+
+                if (pool.length === 0) {
+                    grid.innerHTML = "<div style='width:100%; text-align:center; padding:50px; color:#c9cdd4;'>暂无任何云端资产数据。</div>";
+                    return;
+                }
+
+                grid.innerHTML = pool.map(item => `
+                    <div style="width:110px; cursor:pointer; text-align:center; padding:5px; border:2px solid transparent; border-radius:8px;" 
+                         onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'" 
+                         onclick="addRefToPool('${item.name}', '${item.b64}')">
+                        <img src="${item.b64}" style="width:100px; height:100px; object-fit:cover; border-radius:6px; border:1px solid #e5e6eb;">
+                        <div style="font-size:11px; margin-top:6px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;" title="${item.name}">${item.name}</div>
+                        <div style="font-size:10px; color:var(--primary); background:#e8f3ff; border-radius:4px; display:inline-block; padding:2px 6px; margin-top:2px;">${item.label}</div>
+                    </div>
+                `).join('');
+
+            } catch (e) {
+                grid.innerHTML = `<div style='width:100%; text-align:center; padding:20px; color:#f53f3f;'>❌ 加载失败: ${e.message}</div>`;
+            }
         }
 
         function addRefToPool(name, b64) {
-            if(!localRefPool.find(x => x.b64 === b64)) {
-                localRefPool.push({ name, b64 });
-                renderRefGrid();
-            }
+            if(!localRefPool.find(x => x.b64 === b64)) { localRefPool.push({ name, b64 }); renderRefGrid(); }
             document.getElementById('globalAssetModal').style.display = 'none';
         }
-// 🌟 补回丢失的渲染函数
-        function removeRef(index) {
-            localRefPool.splice(index, 1);
-            renderRefGrid();
-        }
+
+        function removeRef(index) { localRefPool.splice(index, 1); renderRefGrid(); }
 
         function renderRefGrid() {
             const grid = document.getElementById('refGrid');
@@ -374,45 +308,25 @@
                 return;
             }
             grid.innerHTML = localRefPool.map((item, i) => `
-                <div class="ref-item">
-                    <img src="${item.b64}">
-                    <div class="ref-del" onclick="removeRef(${i})">×</div>
-                </div>
+                <div class="ref-item"><img src="${item.b64}"><div class="ref-del" onclick="removeRef(${i})">×</div></div>
             `).join('');
         }
 
-        // 🌟 修改：让独立窗口也具备“自动转存图床”功能
         async function handleLocalUpload(e) {
             const file = e.target.files[0];
             if(!file) return;
-            
             log(`⏳ 正在将本地参考图转存至云端图床...`);
-            const formData = new FormData();
-            formData.append('file', file);
-
             try {
-                const res = await fetch('/api/upload', {
-                    method: 'POST',
-                    headers: { 'x-access-code': 'dajingdongqu' }, // 对应 server.js 的暗号
-                    body: formData
-                });
-                const data = await res.json();
-                
-                if (data.url) {
-                    localRefPool.push({ name: file.name || '本地图片', b64: data.url }); // 🌟 这里存的是 URL
+                const cloudUrl = await window.uploadMediaToCloud(file);
+                if (cloudUrl) {
+                    localRefPool.push({ name: file.name || '本地图片', b64: cloudUrl });
                     renderRefGrid();
-                    log(`✅ 参考图已就绪：${data.url}`);
-                } else {
-                    throw new Error(data.error);
+                    log(`✅ 参考图已就绪：${cloudUrl}`);
                 }
-            } catch (err) {
-                log(`❌ 预上传失败: ${err.message}`);
-                alert("参考图上传失败，请检查网络或图床 Key");
-            }
+            } catch (err) { log(`❌ 上传失败: ${err.message}`); }
             e.target.value = '';
         }
 
-        // --- @ 引用逻辑 ---
         function handleRichInput(e) {
             const sel = window.getSelection();
             if(sel.rangeCount === 0) return;
@@ -423,17 +337,13 @@
                 savedRange = range.cloneRange();
                 const rect = range.getBoundingClientRect();
                 const menu = document.getElementById('mentionMenu');
-                menu.style.display = 'block';
-                menu.style.left = rect.left + 'px';
-                menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+                menu.style.display = 'block'; menu.style.left = rect.left + 'px'; menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
                 document.getElementById('mentionMenuGrid').innerHTML = localRefPool.map((item) => `
                     <div style="aspect-ratio:1; border-radius:4px; overflow:hidden; cursor:pointer;" onmousedown="event.preventDefault();insertMentionPill('${item.b64}', '${item.name}')">
                         <img src="${item.b64}" style="width:100%;height:100%;object-fit:cover;">
                     </div>
                 `).join('');
-            } else {
-                document.getElementById('mentionMenu').style.display = 'none';
-            }
+            } else { document.getElementById('mentionMenu').style.display = 'none'; }
         }
 
         function insertMentionPill(b64, name) {
@@ -450,8 +360,6 @@
             savedRange.collapse(false); sel.removeAllRanges(); sel.addRange(savedRange);
         }
 
-        // --- 核心生图逻辑 ---
-        // --- 核心生图逻辑 (完整异步防超时版) ---
         async function generateImage() {
             const inputEl = document.getElementById('promptInput');
             const modelSelect = document.getElementById('modelSelect');
@@ -461,140 +369,95 @@
             let rawText = "";
             let inlineImgs = [];
             
-            // 1. 组装提示词与视觉锚点
             inputEl.childNodes.forEach(node => {
-                if (node.nodeType === Node.TEXT_NODE) {
-                    rawText += node.textContent;
-                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.nodeType === Node.TEXT_NODE) rawText += node.textContent;
+                else if (node.nodeType === Node.ELEMENT_NODE) {
                     if (node.classList.contains('inline-pill')) {
                         inlineImgs.push(node.getAttribute('data-b64'));
                         rawText += ` [参考图${inlineImgs.length}: ${node.innerText}] `;
-                    } else {
-                        rawText += node.innerText;
-                    }
+                    } else { rawText += node.innerText; }
                 }
             });
 
             if(!rawText.trim() && inlineImgs.length === 0) return alert("提示词不能为空！");
 
-            // 2. 智能分辨率适配
-            let sizeVal = "";
-            if (selectedModel.includes('doubao')) {
-                if (ratioVal === "9:16") sizeVal = "1440*2560";
-                else if (ratioVal === "1:1") sizeVal = "2048*2048";
-                else if (ratioVal === "21:9") sizeVal = "3440*1440";
-                else if (ratioVal === "4:3") sizeVal = "2304*1728";
-                else sizeVal = "2560*1440"; 
-            } else {
+            if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
+
+            const resVal = document.getElementById('resolutionSelect').value;
+            let sizeVal = "1920*1080"; 
+            if (resVal === '1K') {
                 if (ratioVal === "9:16") sizeVal = "720*1280";
                 else if (ratioVal === "1:1") sizeVal = "1024*1024";
                 else if (ratioVal === "21:9") sizeVal = "1280*548";
                 else if (ratioVal === "4:3") sizeVal = "1024*768";
-                else sizeVal = "1920*1080"; 
+                else sizeVal = "1280*720";
+            } else if (resVal === '2K') {
+                if (ratioVal === "9:16") sizeVal = "1440*2560";
+                else if (ratioVal === "1:1") sizeVal = "2048*2048";
+                else if (ratioVal === "21:9") sizeVal = "2560*1080";
+                else if (ratioVal === "4:3") sizeVal = "2048*1536";
+                else sizeVal = "2560*1440";
+            } else if (resVal === '4K') {
+                if (ratioVal === "9:16") sizeVal = "2160*3840";
+                else if (ratioVal === "1:1") sizeVal = "4096*4096";
+                else if (ratioVal === "21:9") sizeVal = "3840*1600";
+                else if (ratioVal === "4:3") sizeVal = "4096*3072";
+                else sizeVal = "3840*2160";
             }
-
             const stylePrefix = (globalStyle && STYLE_MODIFIERS[globalStyle]) ? STYLE_MODIFIERS[globalStyle] : "";
             const sysInject = inlineImgs.length > 1 ? "【系统指令：请识别提示词中的[参考图X]标识，将多个参考对象的特征融合】" : "";
             const finalPrompt = stylePrefix + sysInject + rawText;
             
-            const modelNameMap = {
-                "wan2.7-image": "阿里云 Wan2.7",
-                "doubao-seedream-5.0-lite": "火山引擎 Doubao",
-                "gemini-3.1-flash-image-preview": "Google Gemini"
-            };
-            const currentModelLabel = modelNameMap[selectedModel] || "AI 模型";
-
             const btn = document.getElementById('btnGenerate');
             const status = document.getElementById('resultStatus');
-            
-            btn.disabled = true; 
-            btn.innerText = `⏳ [${currentModelLabel}] 生成中...`;
+            btn.disabled = true; btn.innerText = `⏳ 生成中...`;
             clearResult();
-            
-            status.innerText = `🚀 正在以适配分辨率提交至 ${currentModelLabel}...`;
-            log(`[DEBUG] 提交模型: ${selectedModel}, 分辨率: ${sizeVal}`);
+            status.innerText = `🚀 正在提交...`;
 
             try {
-                // 🌟 核心暗号：给后端发送请求，带上 async_mode: true
                 const res = await apiRequest('/api/image/create', { 
-                    model: selectedModel, 
-                    prompt: finalPrompt, 
-                    images: inlineImgs, 
-                    ratio: ratioVal, 
-                    size: sizeVal,
-                    async_mode: true  // 👈 这个暗号决不能丢！
+                    model: selectedModel, prompt: finalPrompt, images: inlineImgs, ratio: ratioVal, size: sizeVal, async_mode: true
                 });
 
                 let b64 = "";
 
-                // 🌟 前端轮询模式：拿着小票不断问进度，永不超时
                 if (res.taskId) {
-                    log(`✅ 成功提交至云端排队，获得小票 TaskID: ${res.taskId}`);
-                    log(`🔄 启动前端轮询模式，每 3.5 秒查询一次进度...`);
-                    
-                        while (true) {
+                    log(`✅ 排队成功，TaskID: ${res.taskId}`);
+                    while (true) {
                         await new Promise(resolve => setTimeout(resolve, 3500));
-                        
-                        // 🌟 终极防呆补丁：自动从 app.js 中读取正确的 API_BASE！
-                        let currentUrl = "";
-                        if (typeof API_BASE !== 'undefined') {
-                            currentUrl = API_BASE; 
-                        } else {
-                            currentUrl = "https://proxy-server-us-it0u.onrender.com"; 
-                        }
+                        let currentUrl = typeof API_BASE !== 'undefined' ? API_BASE : "https://proxy-server-web.onrender.com"; 
+                        const userToken = localStorage.getItem('userToken');
 
-                        console.log(`[DEBUG] 🔍 轮询请求地址: ${currentUrl}/api/dashscope/poll/${res.taskId}`);
-                        
                         const pollRes = await fetch(`${currentUrl}/api/dashscope/poll/${res.taskId}`, {
                             method: 'GET',
-                            headers: { 'x-access-code': 'dajingdongqu' }
+                            headers: { 'Authorization': `Bearer ${userToken}` } 
                         });
                         
-                        if (!pollRes.ok) throw new Error(`轮询请求失败 HTTP ${pollRes.status}`);
+                        if (!pollRes.ok) throw new Error(`轮询失败 HTTP ${pollRes.status}`);
                         const pollData = await pollRes.json();
                         const taskStatus = pollData.output?.task_status || pollData.task_status;
                         
                         if (taskStatus === 'SUCCEEDED') {
-                            // 🌟 全兼容数据解析逻辑（防止 undefined 和 choices 报错）
                             const out = pollData.output || {};
-                            if (out.results && out.results.length > 0) {
-                                b64 = out.results[0].url || out.results[0].image_url;
-                            } else if (out.choices && out.choices[0]?.message?.content) {
+                            if (out.results && out.results.length > 0) b64 = out.results[0].url || out.results[0].image_url;
+                            else if (out.choices && out.choices[0]?.message?.content) {
                                 const content = out.choices[0].message.content;
                                 const imgItem = Array.isArray(content) ? content.find(c => c.image || c.url) : null;
-                                if (imgItem) b64 = imgItem.image || imgItem.url;
-                                else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
-                            } else if (out.image_url) {
-                                b64 = out.image_url;
-                            } else if (out.image) {
-                                b64 = out.image;
-                            }
+                                if (imgItem) b64 = imgItem.image || imgItem.url; else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
+                            } else if (out.image_url) b64 = out.image_url;
+                            else if (out.image) b64 = out.image;
                             
-                            if (!b64) {
-                                console.error("无法解析完整的云端返回数据:", pollData);
-                                throw new Error("云端已完成，但提取图片链接失败");
-                            }
-                            
-                            log(`✅ 阿里云生图完成！`);
+                            if (!b64) throw new Error("提取图片链接失败");
                             break;
                         } else if (taskStatus === 'FAILED') {
                             throw new Error(`阿里云生图失败: ${pollData.output?.message || pollData.message}`);
-                        } else {
-                            log(`⏳ 云端绘制中，当前状态: ${taskStatus}...`);
                         }
                     }
-                } 
-                // 同步模式 (Gemini/Doubao 直接返回图片)
-                else if (res.data && res.data.length > 0) {
+                } else if (res.data && res.data.length > 0) {
                     b64 = res.data[0].url;
-                    log(`✅ 获得同步生图链接。`);
-                } else {
-                    throw new Error("返回数据异常：未包含图片地址或 TaskID");
-                }
+                } else throw new Error("未包含图片地址或 TaskID");
 
                 const imgEl = document.getElementById('resultImg'); 
-                
-                // --- 跨域代理与渲染 ---
                 if (b64.startsWith('http')) {
                     status.innerText = "📥 AI 绘制完毕，正在安全下载图片...";
                     try {
@@ -603,34 +466,29 @@
                         const blob = await imgRes.blob();
                         b64 = await new Promise(r => { const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob); });
                     } catch (corsErr) {
-                        log("⚠️ 跨域拦截，启动后端代理...");
                         const proxyRes = await apiRequest('/api/proxy-image', { url: b64 });
-                        if (proxyRes.base64) b64 = proxyRes.base64;
-                        else throw new Error("代理下载图片失败");
+                        if (proxyRes.base64) b64 = proxyRes.base64; else throw new Error("代理下载图片失败");
                     }
                 }
 
+                status.innerText = "☁️ 正在永久保存至云端...";
+                b64 = await window.uploadMediaToCloud(b64, 'png');
+                
                 generatedB64 = b64;
                 imgEl.src = b64; 
-                
-                imgEl.onload = () => {
-                    status.style.display = 'none';
-                    imgEl.style.display = 'block';
-                };
+                imgEl.onload = () => { status.style.display = 'none'; imgEl.style.display = 'block'; };
 
                 document.getElementById('btnConfirm').style.display = 'block';
                 document.getElementById('btnDownload').style.display = 'block';
                 document.getElementById('btnDelete').style.display = 'block';
                 
             } catch (e) {
-                status.innerText = `❌ 生图失败: ${e.message}`;
-                log(`❌ 生图失败: ${e.message}`);
+                status.innerText = `❌ 生图失败: ${e.message}`; log(`❌ 生图失败: ${e.message}`);
             } finally {
                 btn.disabled = false; btn.innerText = "🚀 重新生成画面";
             }
         }
 
-        // --- 结果处理 ---
         function clearResult() {
             generatedB64 = null;
             document.getElementById('resultImg').style.display = 'none';
@@ -646,17 +504,36 @@
             if(!generatedB64) return;
             const a = document.createElement('a');
             a.href = generatedB64;
-            a.download = `AI_Gen_${Date.now()}.png`;
-            a.click();
+            a.download = `AI_Gen_${Date.now()}.png`; a.click();
         }
 
-        function confirmAndReturn() {
+        async function confirmAndReturn() {
             if(!generatedB64) return;
-            // 🌟 核心：调用父页面的方法，把图片传回去
+            
+            try {
+                const ctx = await DB.get('active_context');
+                const { data: { user } } = await window.cloudSupabase.auth.getUser();
+                
+                if (!ctx || !ctx.projectId) throw new Error("无法识别当前项目归属！");
+
+                // 🌟 使用全局 window.cloudSupabase
+                await window.cloudSupabase.from('private_keyframes').insert([{
+                    project_id: ctx.projectId,
+                    user_email: user.email,
+                    img_url: generatedB64
+                }]);
+                
+                log(`✅ 已安全保存至您的【私有关键帧库】，团队可见！`);
+                
+            } catch (err) {
+                console.error("保存私有关键帧失败:", err);
+                log(`❌ 保存失败: ${err.message}`);
+            }
+
             if (window.parent && window.parent.addGeneratedImageToRow) {
                 window.parent.addGeneratedImageToRow(rowId, generatedB64);
             } else {
-                alert("未检测到父页面连接，无法保存！");
+                alert("✅ 已成功保存到云端资产库！");
             }
         }
     </script>
