@@ -305,14 +305,16 @@
                 await DB.set('globalImagesPool', globalImagesPool); 
                 
                 const ctx = await DB.get('active_context');
-                if (ctx && ctx.projectId && window.cloudSupabase) {
+                if (ctx && ctx.projectId) {
+                    // 🌟 净化：因为 assets 是 jsonb，所以直接传 extractedData 对象
                     await window.cloudSupabase.from('shared_projects')
                         .update({ assets: extractedData })
                         .eq('id', ctx.projectId);
                 }
-            } catch (e) { console.error("保存共享状态失败", e); }
+            } catch (e) {
+                console.error("保存共享状态失败", e);
+            }
         }
-
         async function openProjectLibrary(cat, idx) {
             libraryTarget = { cat, idx };
             document.getElementById('projectLibraryModal').style.display = 'flex';

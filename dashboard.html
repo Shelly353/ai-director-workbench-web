@@ -74,16 +74,11 @@
         </div>
     </div>
 
-    <script src="js/app.js?v=3000"></script>
+   <script src="js/app.js?v=6000"></script>
     <script>
-        // 🌟 核心修复 1：直接借用 app.js 初始化的实例，绝不重复创建！
         var myDB = window.cloudSupabase;
-
         var WORKSPACE_KEYS = ['scriptText', 'scriptSummary', 'storyboardData', 'extractedData', 'globalRatio', 'llmModelSelect', 'llm_config', 'charactersData'];
-        var projects = [];
-        var currentView = 'projects';
-        var activeProjectId = null;
-        var currentShareProjectId = null;
+        var projects = [], currentView = 'projects', activeProjectId = null, currentShareProjectId = null;
 
         window.onload = async () => {
             const userId = localStorage.getItem('userId');
@@ -139,12 +134,10 @@
 
             projects = data.map(p => {
                 let safeData = {};
-                // 兼容读取老数据，但废弃 isString 标记，不再把新数据转成字符串
+                // 🌟 jsonb 会原生返回对象，如果万一历史遗留了字符串，我们兼容解析一次
                 if (p.data) {
-                    try { 
-                        if (typeof p.data === 'string') { safeData = JSON.parse(p.data); } 
-                        else { safeData = p.data; }
-                    } catch(e) {}
+                    if (typeof p.data === 'string') { try { safeData = JSON.parse(p.data); } catch(e) {} } 
+                    else { safeData = p.data; }
                 }
                 
                 return {
@@ -201,6 +194,7 @@
             const name = prompt("请输入项目名称:");
             if (name && name.trim()) {
                 const newId = 'proj_' + Date.now();
+                // 🌟 净化：原生传对象 { episodes: [] }
                 await myDB.from('shared_projects').insert([{ id: newId, name: name.trim(), owner_email: window.currentUserEmail, data: { episodes: [] } }]);
                 await myDB.from('project_members').insert([{ project_id: newId, user_email: window.currentUserEmail, role: 'owner', status: 'active' }]);
                 await loadProjects(); 
@@ -219,9 +213,8 @@
                 proj.episodes.push(newEp);
                 renderView();
 
-                // 🌟 核心修复 2：直接传入 Object 原生数据对象，摒弃 JSON.stringify
                 let payload = { ...proj.data, episodes: proj.episodes };
-
+                // 🌟 净化：原生传对象 payload
                 const { error } = await myDB.from('shared_projects').update({ data: payload }).eq('id', activeProjectId);
                 
                 if (error) {
@@ -246,6 +239,7 @@
             if (newName && newName.trim()) {
                 const updatedEpisodes = proj.episodes.map(e => String(e.id) === String(epId) ? { ...e, name: newName.trim() } : e);
                 let payload = { ...proj.data, episodes: updatedEpisodes };
+                // 🌟 净化
                 await myDB.from('shared_projects').update({ data: payload }).eq('id', activeProjectId);
                 await loadProjects();
             }
@@ -263,6 +257,7 @@
                 const proj = projects.find(p => String(p.id) === String(activeProjectId));
                 const updatedEpisodes = proj.episodes.filter(e => String(e.id) !== String(epId));
                 let payload = { ...proj.data, episodes: updatedEpisodes };
+                // 🌟 净化
                 await myDB.from('shared_projects').update({ data: payload }).eq('id', activeProjectId);
                 await loadProjects();
             }
@@ -286,7 +281,6 @@
                     snapshot[key] = val;
                 }
                 
-                // 🌟 核心防卫：没有有效数据坚决不覆写，避免冲刷分集
                 if (!hasData) return;
                 
                 const { data: serverProj } = await myDB.from('shared_projects').select('data').eq('id', ctx.projectId).single();
@@ -301,6 +295,7 @@
                     if (idx !== -1) {
                         eps[idx].data = snapshot;
                         let payload = { ...existingData, episodes: eps };
+                        // 🌟 净化
                         await myDB.from('shared_projects').update({ data: payload }).eq('id', ctx.projectId);
                     }
                 }
