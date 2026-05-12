@@ -141,25 +141,53 @@ const SUPABASE_URL = 'https://ywigafhbswrovuhvnkty.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 🌟 新增：从云端数据库获取并显示实际积分
-async function fetchCredits() {
-    const userId = localStorage.getItem('userId');
-    if (!userId) return;
-    try {
-        const { data, error } = await supabaseClient
-            .from('profiles')
-            .select('credits')
-            .eq('user_id', userId)
-            .single();
-        if (data) {
-            // 将云端积分渲染到页面右上角
-            document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
-            localStorage.setItem('userCredits', data.credits);
+// ==========================================
+        // 🌟 核心升级：直接借用 app.js 的云端总控台，消灭 Multiple instances 冲突！
+        // ==========================================
+        
+        async function fetchCredits() {
+            const userId = localStorage.getItem('userId');
+            if (!userId || !window.cloudSupabase) return;
+            try {
+                const { data } = await window.cloudSupabase.from('profiles').select('credits').eq('user_id', userId).single();
+                if (data) {
+                    document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
+                    localStorage.setItem('userCredits', data.credits);
+                }
+            } catch (e) { console.error("获取积分失败:", e); }
         }
-    } catch (e) {
-        console.error("获取积分失败:", e);
-    }
-}
+
+        async function saveAndBack() {
+            try {
+                syncRichTextState();
+                await DB.set('storyboardData', storyboardData);
+                await DB.set('globalRatio', document.getElementById('g_ratio').value);
+                
+                const ctx = await DB.get('active_context');
+                if (ctx && ctx.projectId) {
+                    // 强制拉取最新数据，防止互相覆盖
+                    const { data: serverProj } = await window.cloudSupabase.from('shared_projects').select('data').eq('id', ctx.projectId).limit(1);
+                    if (serverProj && serverProj.length > 0) {
+                        let existingData = serverProj[0].data || {};
+                        if (typeof existingData === 'string') existingData = JSON.parse(existingData);
+
+                        let eps = existingData.episodes || [];
+                        const idx = eps.findIndex(e => String(e.id) === String(ctx.epId));
+                        if (idx !== -1) {
+                            eps[idx].data = eps[idx].data || {};
+                            eps[idx].data.storyboardData = storyboardData;
+                            eps[idx].data.globalRatio = document.getElementById('g_ratio').value;
+                            // 🌟 使用全局实例 window.cloudSupabase
+                            await window.cloudSupabase.from('shared_projects').update({ data: existingData }).eq('id', ctx.projectId);
+                        }
+                    }
+                }
+                location.href = '../dashboard.html'; 
+            } catch (e) {
+                console.error("保存失败", e);
+                location.href = '../dashboard.html';
+            }
+        }
 
 // 🌟 统一的服务器端扣费接口
 async function checkAndDeductCredits(actionKey, modelName) {
