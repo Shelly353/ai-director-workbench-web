@@ -17,19 +17,15 @@
         .grid-container { display: flex !important; flex-wrap: wrap !important; gap: 30px !important; justify-content: flex-start !important; align-items: flex-start !important; }
         .card { width: 220px !important; height: 220px !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; background: #fff; border: 1px solid #e5e6eb; border-radius: 14px; cursor: pointer; position: relative; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
         .card:hover { transform: translateY(-6px); box-shadow: 0 12px 24px rgba(0,0,0,0.08); border-color: var(--primary); }
-        
-        /* 核心：卡片动作按钮样式 */
         .card-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; opacity: 0; transition: 0.2s; }
         .card:hover .card-actions { opacity: 1; }
         .action-icon { width: 28px; height: 28px; border-radius: 50%; background: #f4f5f9; display: flex; justify-content: center; align-items: center; font-size: 13px; color: #86909c; transition: 0.2s; }
         .action-icon:hover { background: #e8f3ff; color: var(--primary); }
         .action-icon.delete:hover { background: #ffece8; color: #f53f3f; }
-
         .card-icon { font-size: 60px; margin-bottom: 18px; line-height: 1; transition: transform 0.2s; }
         .card-title { font-size: 16px; font-weight: 600; color: #1d2129; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; text-align: center;}
         .card-add { border: 2px dashed #dcdfe6 !important; background: transparent !important; box-shadow: none !important; }
         .card-add:hover { border-color: var(--primary) !important; background: #f8fbff !important; }
-        
         .user-profile { display: flex; align-items: center; gap: 10px; margin-left: 15px; padding-left: 15px; border-left: 1px solid #e5e6eb; }
         .user-avatar { width: 34px; height: 34px; border-radius: 50%; background: #0066ff; color: white; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 16px; text-transform: uppercase; }
         .user-details { display: flex; flex-direction: column; }
@@ -43,7 +39,7 @@
     <div class="header">
         <div class="breadcrumb" id="breadcrumbHeader"></div>
         <div style="display:flex; gap:15px; align-items:center;">
-            <button id="adminPanelBtn" class="btn btn-outline" style="display:none; border-color:#722ed1; color:#722ed1;" onclick="location.href='admin/admin_panel.html'">📊 管理后台</button>
+            <button id="adminPanelBtn" class="btn btn-outline" style="display:none; border-color:#722ed1; color:#722ed1;" onclick="window.open('admin/admin_panel.html', '_blank')">📊 数据管理</button>
             <button id="topAddBtn" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold;" onclick="handleTopAddClick()">+ 新建</button>
             <span id="headerCredit" class="credit-badge" onclick="showRechargeModal()" style="cursor:pointer;">💎 积分: ...</span>
             
@@ -77,8 +73,12 @@
 
     <script src="js/app.js?v=7000"></script>
     <script>
+        // 🌟 修复：防止 WORKSPACE_KEYS 重复声明导致的崩溃
+        if (typeof WORKSPACE_KEYS === 'undefined') {
+            var WORKSPACE_KEYS = ['scriptText', 'scriptSummary', 'storyboardData', 'extractedData', 'globalRatio', 'llmModelSelect', 'llm_config', 'charactersData'];
+        }
+        
         var myDB = window.cloudSupabase;
-        var WORKSPACE_KEYS = ['scriptText', 'scriptSummary', 'storyboardData', 'extractedData', 'globalRatio', 'llmModelSelect', 'llm_config', 'charactersData'];
         var projects = [], currentView = 'projects', activeProjectId = null, currentShareProjectId = null;
 
         window.onload = async () => {
@@ -109,9 +109,10 @@
             const { data, error } = await myDB.rpc('get_my_projects', { my_email: window.currentUserEmail });
             if (error) { alert("加载失败: " + error.message); return; }
 
-            // 🌟 核心：判断是否有管理权限
+            // 🌟 核心：判断是否有管理权限，动态显示按钮
             const isAdmin = data.some(p => p.my_role === 'owner' || p.my_role === 'admin');
-            document.getElementById('adminPanelBtn').style.display = isAdmin ? 'inline-flex' : 'none';
+            const adminBtn = document.getElementById('adminPanelBtn');
+            if (adminBtn) adminBtn.style.display = isAdmin ? 'inline-flex' : 'none';
 
             projects = data.map(p => {
                 let safeData = {};
@@ -148,7 +149,6 @@
                     return '<div class="card card-add" onclick="' + onClickFunc + '"><div class="card-icon">➕</div><div class="card-title">新建' + (item._type === 'project' ? '项目' : '分集') + '</div></div>';
                 }
                 
-                // 🌟 找回：协作按钮 (仅限项目视图)
                 const actionShare = currentView === 'projects' ? '<div class="action-icon" title="协作" onclick="event.stopPropagation(); openShareModal(\'' + item.id + '\')">👥</div>' : '';
                 
                 return '<div class="card" onclick="' + (currentView === 'projects' ? "openProject('" + item.id + "')" : "enterEpisode('" + item.id + "')") + '">' +
@@ -160,7 +160,6 @@
             }).join('');
         }
 
-        // 🌟 找回：项目重命名逻辑
         async function renameProject(id) {
             const proj = projects.find(p => String(p.id) === String(id));
             const newName = prompt("重命名项目：", proj.name);
@@ -170,7 +169,6 @@
             }
         }
 
-        // 🌟 找回：分集重命名逻辑
         async function renameEpisode(epId) {
             const proj = projects.find(p => String(p.id) === String(activeProjectId));
             const ep = proj.episodes.find(e => String(e.id) === String(epId));
@@ -183,7 +181,6 @@
             }
         }
 
-        // 🌟 找回：邀请成员逻辑
         function openShareModal(id) {
             currentShareProjectId = id;
             const proj = projects.find(p => String(p.id) === String(id));
@@ -201,7 +198,6 @@
             } catch (e) { alert("操作失败：" + e.message); }
         }
 
-        // --- 基础逻辑保持不变 ---
         function handleTopAddClick() { currentView === 'projects' ? createProject() : createEpisode(); }
         async function createProject() {
             const name = prompt("请输入项目名称:");
@@ -241,6 +237,33 @@
             window.location.href = 'module1.html';
         }
         async function logout() { if (confirm("确定退出？")) { await myDB.auth.signOut(); localStorage.clear(); window.location.replace('index.html'); } }
+        async function packCurrentWorkspaceToCloud() {
+            try {
+                const ctx = await DB.get('active_context');
+                if (!ctx || !ctx.projectId || !ctx.epId) return;
+                let snapshot = {}; let hasData = false;
+                for (let key of WORKSPACE_KEYS) {
+                    let val = await DB.get(key);
+                    if (val !== null && val !== undefined) hasData = true;
+                    snapshot[key] = val;
+                }
+                if (!hasData) return;
+                const { data: serverProj } = await myDB.from('shared_projects').select('data').eq('id', ctx.projectId).limit(1);
+                if (serverProj && serverProj.length > 0) {
+                    let existingData = typeof serverProj[0].data === 'string' ? JSON.parse(serverProj[0].data) : (serverProj[0].data || {});
+                    let eps = existingData.episodes || [];
+                    const idx = eps.findIndex(e => String(e.id) === String(ctx.epId));
+                    if (idx !== -1) {
+                        eps[idx].data = snapshot;
+                        let payload = { ...existingData, episodes: eps };
+                        await myDB.from('shared_projects').update({ data: payload }).eq('id', ctx.projectId);
+                    }
+                }
+            } catch (e) {} finally {
+                for (let key of WORKSPACE_KEYS) await DB.set(key, null);
+                await DB.set('active_context', null);
+            }
+        }
     </script>
 </body>
 </html>
