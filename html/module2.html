@@ -3,17 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>AI 导演 - 步骤2：分镜匹配</title>
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <link rel="stylesheet" href="../css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-/* 用户状态栏样式 */
-.user-panel { display: flex; align-items: center; gap: 15px; margin-left: 20px; }
-.credit-badge { background: #fff5f5; color: #ff6b6b; padding: 5px 12px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 13px; white-space: nowrap; }
-.logout-btn { color: #86909c; text-decoration: none; font-size: 13px; cursor: pointer; transition: 0.2s; }
-.logout-btn:hover { color: #f53f3f; }
+        .user-panel { display: flex; align-items: center; gap: 15px; margin-left: 20px; }
+        .credit-badge { background: #fff5f5; color: #ff6b6b; padding: 5px 12px; border-radius: 20px; font-weight: bold; border: 1px solid #ffd8d8; font-size: 13px; white-space: nowrap; }
+        .logout-btn { color: #86909c; text-decoration: none; font-size: 13px; cursor: pointer; transition: 0.2s; }
+        .logout-btn:hover { color: #f53f3f; }
         .header { position: sticky; top: 0; z-index: 1000; background: #ffffff; padding: 20px 25px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e6eb; box-shadow: 0 4px 12px rgba(0,0,0,0.08); min-height: 80px; box-sizing: border-box; }
         .steps { display: flex; gap: 20px; font-size: 15px; }
         .btn { display: inline-flex; align-items: center; justify-content: center; height: 38px; line-height: 1; padding: 0 18px; white-space: nowrap; font-size: 14px; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
@@ -38,38 +35,37 @@
     </style>
 </head>
 <body>
-<div class="header">
+    <div class="header">
         <div style="display:flex; align-items:center;">
-            <button class="btn btn-outline" onclick="saveAndBack()" style="margin-right: 20px; padding: 8px 15px; border-color: #e5e6eb;">🏠 返回项目</button>
-            
+            <button class="btn btn-outline" onclick="saveAndGoTo('../dashboard.html')" style="margin-right: 20px; padding: 8px 15px; border-color: #e5e6eb;">🏠 返回项目</button>
             <div class="steps">
                 <div class="step">1. 剧本设定分析</div>
                 <div class="step active">2. 分镜匹配</div>
                 <div class="step">3. 视频生成</div>
             </div>
         </div> 
-<div style="display:flex; gap:12px; align-items:center;">
-<span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
-    <a class="logout-btn" style="margin-right:15px;" onclick="logout()">退出</a>
+        <div style="display:flex; gap:12px; align-items:center;">
+            <span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
+            <a class="logout-btn" style="margin-right:15px;" onclick="logout()">退出</a>
             <select id="g_ratio">
                 <option value="16:9">16:9 横屏</option>
                 <option value="9:16">9:16 竖屏</option>
                 <option value="21:9">21:9 宽银幕</option>
                 <option value="4:3">4:3 电视</option>
             </select>
-            <button class="btn btn-outline" onclick="location.href='../module1.html'">上一步</button>
-            <button id="btnNextStep" class="btn btn-primary" onclick="goToStep3()">下一步 (生成视频)</button>
+            <button class="btn btn-outline" onclick="saveAndGoTo('../module1.html')">上一步</button>
+            <button id="btnNextStep" class="btn btn-primary" onclick="saveAndGoTo('module3.html')">下一步 (生成视频)</button>
         </div>
-    </div> <div class="main-container">
+    </div> 
+    
+    <div class="main-container">
         <div style="display:flex; justify-content:space-between; margin-bottom:25px; align-items:center;">
             <h3 style="margin:0;">智能分镜拆解</h3>
-
-<div style="display:flex; gap:12px;">
+            <div style="display:flex; gap:12px;">
                <select id="llmModelSelect" style="min-width: 150px; font-weight: bold; color: var(--primary);">
                     <option value="deepseek-chat">🧠 DeepSeek</option>
                     <option value="gemini-3-flash-preview">🧠 Gemini 3.1 Flash</option>
                 </select>
-                
                 <select id="splitMethodSelect" style="min-width: 180px;">
                     <option value="split_scene">连续场景法 (资深导演视角)</option>
                 </select>
@@ -93,16 +89,19 @@
         <div id="mentionMenuGrid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px;"></div>
     </div>
 
-<div id="globalImportModal" class="modal-bg">
+    <div id="globalImportModal" class="modal-bg">
         <div class="modal-content" style="height: 80vh;">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:15px;">
                 <h3 style="margin:0;">📥 从项目资产库提取至分镜</h3>
                 <span class="modal-close" onclick="closeGlobalImport()">×</span>
             </div>
             
-            <div style="display:flex; gap:15px; margin-top:15px; border-bottom:1px solid #eee; padding-bottom:15px;">
-                <button id="tabShared" class="btn btn-primary" onclick="loadLibraryTab('shared')">👥 团队共享资产</button>
-                <button id="tabPrivate" class="btn btn-outline" onclick="loadLibraryTab('private')">🔒 我的私有关键帧</button>
+            <div style="display:flex; gap:10px; margin-top:15px; border-bottom:1px solid #eee; padding-bottom:15px; flex-wrap:wrap;">
+                <button id="tab_characters" class="btn btn-primary" onclick="loadLibraryTab('characters')">👤 人物</button>
+                <button id="tab_scenes" class="btn btn-outline" onclick="loadLibraryTab('scenes')">🏞️ 场景</button>
+                <button id="tab_props" class="btn btn-outline" onclick="loadLibraryTab('props')">🧸 道具</button>
+                <button id="tab_effects" class="btn btn-outline" onclick="loadLibraryTab('effects')">✨ 特效</button>
+                <button id="tab_private" class="btn btn-outline" style="margin-left:auto; border-color:#722ed1; color:#722ed1;" onclick="loadLibraryTab('private')">🔒 我的私有关键帧</button>
             </div>
 
             <div id="globalImportGrid" style="display:flex; flex-wrap:wrap; gap:15px; overflow-y:auto; flex:1; padding-top:15px; align-content: flex-start;"></div>
@@ -134,178 +133,140 @@
         let extractedData = { characters: [], scenes: [], props: [], effects: [] };
         let savedRange = null;
         let currentImportRowId = null;
-// ==========================================
 
-// ==========================================
-        // 🌟 核心升级：直接借用 app.js 的云端总控台，消灭 Multiple instances 冲突！
-        // ==========================================
-        
-       // ✅ 替换为这部分内容（已修正为 window.cloudSupabase）
-async function fetchCredits() {
-    const userId = localStorage.getItem('userId');
-    if (!userId || !window.cloudSupabase) return;
-    try {
-        const { data } = await window.cloudSupabase.from('profiles').select('credits').eq('user_id', userId).single();
-        if (data) {
-            document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
-            localStorage.setItem('userCredits', data.credits);
+        async function fetchCredits() {
+            const userId = localStorage.getItem('userId');
+            if (!userId || !window.cloudSupabase) return;
+            try {
+                const { data } = await window.cloudSupabase.from('profiles').select('credits').eq('user_id', userId).single();
+                if (data) {
+                    document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
+                    localStorage.setItem('userCredits', data.credits);
+                }
+            } catch (e) { console.error("获取积分失败:", e); }
         }
-    } catch (e) { console.error("获取积分失败:", e); }
-}
 
-async function saveAndBack() {
-    try {
-        syncRichTextState();
-        await DB.set('storyboardData', storyboardData);
-        await DB.set('globalRatio', document.getElementById('g_ratio').value);
-        
-        const ctx = await DB.get('active_context');
-        if (ctx && ctx.projectId) {
-            const { data: serverProj } = await window.cloudSupabase.from('shared_projects').select('data').eq('id', ctx.projectId).limit(1);
-            if (serverProj && serverProj.length > 0) {
-                let existingData = serverProj[0].data || {};
-                if (typeof existingData === 'string') existingData = JSON.parse(existingData);
+        async function checkAndDeductCredits(actionKey, modelName) {
+            const isGemini = modelName.toLowerCase().includes('gemini');
+            const { data: newCredits, error } = await window.cloudSupabase.rpc('deduct_credits_v2', { action_key: actionKey, is_gemini: isGemini });
+            if (error) { alert(`❌ 操作失败：${error.message}`); return false; }
+            document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
+            localStorage.setItem('userCredits', newCredits);
+            return true;
+        }
 
-                let eps = existingData.episodes || [];
-                const idx = eps.findIndex(e => String(e.id) === String(ctx.epId));
-                if (idx !== -1) {
-                    eps[idx].data = eps[idx].data || {};
-                    eps[idx].data.storyboardData = storyboardData;
-                    eps[idx].data.globalRatio = document.getElementById('g_ratio').value;
-                    await window.cloudSupabase.from('shared_projects').update({ data: existingData }).eq('id', ctx.projectId);
+        // 🌟 统一跳板引擎
+        async function saveAndGoTo(url) {
+            const btn = event.target;
+            const orig = btn.innerText;
+            btn.innerText = "⏳ 保存同步中...";
+            try {
+                await saveCurrentState();
+                location.href = url;
+            } catch (e) { location.href = url; }
+        }
+
+        async function saveCurrentState() {
+            syncRichTextState();
+            // 组装文本和内部图片
+            for (let row of storyboardData) {
+                const richEl = document.getElementById(`sb_text_${row.id}`);
+                if(richEl) {
+                    let pText = ""; let localImgs = [];
+                    richEl.childNodes.forEach(node => {
+                        if (node.nodeType === Node.TEXT_NODE) pText += node.textContent;
+                        else if (node.nodeType === Node.ELEMENT_NODE) {
+                            if (node.classList.contains('inline-pill')) localImgs.push(node.getAttribute('data-b64'));
+                            else pText += node.innerText;
+                        }
+                    });
+                    row.text = pText.trim();
+                    row.images = [...new Set([...row.images, ...localImgs])];
+                }
+            }
+            
+            await DB.set('storyboardData', storyboardData);
+            await DB.set('globalRatio', document.getElementById('g_ratio').value);
+
+            // 强制覆盖团队云盘
+            const ctx = await DB.get('active_context');
+            if (ctx && ctx.projectId) {
+                const { data: serverProj } = await window.cloudSupabase.from('shared_projects').select('data').eq('id', ctx.projectId).limit(1);
+                if (serverProj && serverProj.length > 0) {
+                    let existingData = typeof serverProj[0].data === 'string' ? JSON.parse(serverProj[0].data) : (serverProj[0].data || {});
+                    let eps = existingData.episodes || [];
+                    const idx = eps.findIndex(e => String(e.id) === String(ctx.epId));
+                    if (idx !== -1) {
+                        eps[idx].data = eps[idx].data || {};
+                        eps[idx].data.storyboardData = storyboardData;
+                        eps[idx].data.globalRatio = document.getElementById('g_ratio').value;
+                        await window.cloudSupabase.from('shared_projects').update({ data: existingData }).eq('id', ctx.projectId);
+                    }
                 }
             }
         }
-        location.href = '../dashboard.html'; 
-    } catch (e) {
-        console.error("保存失败", e);
-        location.href = '../dashboard.html';
-    }
-}
 
-// 🌟 统一的服务器端扣费接口
-async function checkAndDeductCredits(actionKey, modelName) {
-    const isGemini = modelName.toLowerCase().includes('gemini');
-    
-    // 直接调用服务器端的 RPC 函数
-    const { data: newCredits, error } = await window.cloudSupabase.rpc('deduct_credits_v2', { 
-        action_key: actionKey, 
-        is_gemini: isGemini 
-    });
+        // 🌟 强制读取最新鲜的协作大盘数据
+        window.onload = async () => {
+            const userId = localStorage.getItem('userId');
+            if (!userId) { window.location.replace('index.html'); return; }
 
-    if (error) {
-        alert(`❌ 操作失败：${error.message}`);
-        return false;
-    }
+            await fetchCredits();
+            log(`系统就绪。正在拉取云端最新资产及配置...`);
 
-    // 扣费成功，更新 UI 显示
-    document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
-    localStorage.setItem('userCredits', newCredits);
-    log(`💎 服务器已结算：[${actionKey}] 扣费成功，剩余 ${newCredits} 💎。`);
-    return true;
-}
-// ==========================================
-
-// 🌟 新增：保存当前进度并返回
-async function saveAndBack() {
             try {
-                syncRichTextState();
-                await DB.set('storyboardData', storyboardData);
-                await DB.set('globalRatio', document.getElementById('g_ratio').value);
-                
-                // 🌟 核心升级：退出前强制将分镜进度打入团队云端大盘
                 const ctx = await DB.get('active_context');
-                if (ctx && ctx.projectId) {
-                    const { data: serverProj } = await window.cloudSupabase.from('shared_projects').select('data').eq('id', ctx.projectId).limit(1);
+                if (ctx && ctx.projectId && ctx.epId) {
+                    const { data: serverProj } = await window.cloudSupabase.from('shared_projects').select('data, assets').eq('id', ctx.projectId).limit(1);
                     if (serverProj && serverProj.length > 0) {
-                        let existingData = serverProj[0].data || {};
-                        if (typeof existingData === 'string') existingData = JSON.parse(existingData);
-
+                        let existingData = typeof serverProj[0].data === 'string' ? JSON.parse(serverProj[0].data) : (serverProj[0].data || {});
                         let eps = existingData.episodes || [];
-                        const idx = eps.findIndex(e => String(e.id) === String(ctx.epId));
-                        if (idx !== -1) {
-                            eps[idx].data = eps[idx].data || {};
-                            eps[idx].data.storyboardData = storyboardData;
-                            eps[idx].data.globalRatio = document.getElementById('g_ratio').value;
-                            await window.cloudSupabase.from('shared_projects').update({ data: existingData }).eq('id', ctx.projectId);
+                        const ep = eps.find(e => String(e.id) === String(ctx.epId));
+                        
+                        if (ep && ep.data) {
+                            storyboardData = ep.data.storyboardData || [];
+                            if (ep.data.globalRatio) document.getElementById('g_ratio').value = ep.data.globalRatio;
+                            if (ep.data.llmModelSelect) document.getElementById('llmModelSelect').value = ep.data.llmModelSelect;
+                        }
+                        
+                        if (serverProj[0].assets) {
+                            extractedData = typeof serverProj[0].assets === 'string' ? JSON.parse(serverProj[0].assets) : serverProj[0].assets;
+                            extractedData = { characters: [], scenes: [], props: [], effects: [], ...extractedData };
                         }
                     }
                 }
-                
-                location.href = '../dashboard.html'; 
-            } catch (e) {
-                location.href = '../dashboard.html';
-            }
-        }
 
-window.onload = async () => {
-
-    // 🌟 核心安全：检查登录凭证
-    const userId = localStorage.getItem('userId');
-    if (!userId) {
-        // 如果没有找到身份信息，不给任何提示，直接强行踢回登录页
-        // 使用 replace 而不是 href，是为了不让用户再通过“返回”跳回来
-        window.location.replace('index.html'); 
-        return;
-    }
-            await fetchCredits();
-            log(`系统就绪。正在加载全局视觉资产及模型配置...`);
-            storyboardData = await DB.get('storyboardData') || [];
-            extractedData = await DB.get('extractedData') || { characters: [], scenes: [], props: [], effects: [] };
-            
-            const savedRatio = await DB.get('globalRatio');
-            if (savedRatio) document.getElementById('g_ratio').value = savedRatio;
-            
-            if (storyboardData.length > 0) renderStoryboardUI();
-
-            // 🌟 核心修复：改用 'llmModelSelect' 读取 index 页面存下的模型
-         // 🌟 核心修复：读取 index 页面存下的真实键名 'llmModelSelect'
-            // 🌟 直接赋值，不再做画蛇添足的判断
-            const savedLlm = await DB.get('llmModelSelect');
-            if (savedLlm) {
-                log(`🧠 已识别全局大语言模型：${savedLlm}`);
-                const llmSelect = document.getElementById('llmModelSelect');
-                if (llmSelect) llmSelect.value = savedLlm;
-            }
+                if (storyboardData.length > 0) renderStoryboardUI();
+                const savedLlm = document.getElementById('llmModelSelect').value;
+                log(`🧠 已锁定大语言模型：${savedLlm}`);
+            } catch(e) { console.warn("初始化失败", e); }
         };
 
-        function toggleConsole() {
-            const wrapper = document.getElementById('consoleWrapper');
-            const icon = document.getElementById('consoleToggleIcon');
-            wrapper.classList.toggle('open');
-            icon.innerText = wrapper.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开';
-        }
-
-        function log(msg) {
-            const consoleEl = document.getElementById('logConsole');
-            if (consoleEl) {
-                const time = new Date().toLocaleTimeString();
-                consoleEl.innerText += `[${time}] ${msg}\n`;
-                consoleEl.scrollTop = consoleEl.scrollHeight;
-            }
-        }
+        function toggleConsole() { const w = document.getElementById('consoleWrapper'); w.classList.toggle('open'); document.getElementById('consoleToggleIcon').innerText = w.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开'; }
+        function log(msg) { const c = document.getElementById('logConsole'); if(c){ c.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`; c.scrollTop = c.scrollHeight; } }
 
         async function autoSplitStoryboard() {
-            const scriptText = await DB.get('scriptText');
-            if (!scriptText) return alert("未找到剧本内容，请返回第一步重新输入！");
+            const ctx = await DB.get('active_context');
+            if (!ctx || !ctx.projectId || !ctx.epId) return alert("项目连接丢失，请返回项目重新进入！");
+
+            let scriptText = "";
+            const { data: serverProj } = await window.cloudSupabase.from('shared_projects').select('data').eq('id', ctx.projectId).limit(1);
+            if (serverProj && serverProj.length > 0) {
+                let existingData = typeof serverProj[0].data === 'string' ? JSON.parse(serverProj[0].data) : (serverProj[0].data || {});
+                let eps = existingData.episodes || [];
+                const ep = eps.find(e => String(e.id) === String(ctx.epId));
+                if (ep && ep.data) scriptText = ep.data.scriptText || "";
+            }
+
+            if (!scriptText) return alert("云端未找到剧本内容，请返回第一步检查！");
             
             const btn = document.getElementById('btnSplit');
             const methodKey = document.getElementById('splitMethodSelect').value;
             const currentRatio = document.getElementById('g_ratio').value;
-            
-            // 🌟 补丁 3：直接读取当前页面的模型选择，强制组装配置
-     // 🌟 终极修复：原封不动地把选中的代号发给后端！
             const selectedLlm = document.getElementById('llmModelSelect').value;
-            let config = {
-                model: selectedLlm,
-                endpoint: selectedLlm.includes('gemini') ? "/api/gemini/chat" : "/api/deepseek/chat"
-            };
+            let config = { model: selectedLlm, endpoint: selectedLlm.includes('gemini') ? "/api/gemini/chat" : "/api/deepseek/chat" };
 
-// 替换原本的 cost 计算和扣费
-if (!(await checkAndDeductCredits('split_script', selectedLlm))) return;
-
-            // 🌟 强制保存回全局数据库，把旧的 Gemini 彻底盖掉！
-            await DB.set('llm_config', config);
+            if (!(await checkAndDeductCredits('split_script', selectedLlm))) return;
 
             const defaultPrompt = "请仔细阅读以下剧本，将其拆分成多个连续的分镜画面。";
             const llmPromptTpl = (window.AI_PROMPTS && window.AI_PROMPTS[methodKey]) ? window.AI_PROMPTS[methodKey].llmPrompt : defaultPrompt;
@@ -315,116 +276,57 @@ if (!(await checkAndDeductCredits('split_script', selectedLlm))) return;
             log(`🚀 正在调用 [${config.model}] 生成分镜脚本...`);
             
             const finalPrompt = llmPromptTpl.replace(/{script}/g, scriptText).replace(/{ratio}/g, currentRatio);
-
-            // 🌟 核心修复：为强制 JSON 模式提供数组包裹模版
-            const strictFormat = `
-必须且只能返回包含 "storyboard" 字段的 JSON 对象，该字段是一个数组，每个元素包含 id 和 text 两个属性：
-{
-  "storyboard": [
-    {
-      "id": "1",
-      "text": "镜头1描述..."
-    }
-  ]
-}`;
+            const strictFormat = `必须且只能返回包含 "storyboard" 字段的 JSON 对象，该字段是一个数组，每个元素包含 id 和 text 两个属性。`;
 
             try {
-// 🌟 终极修复：彻底抛弃 system 角色，将所有指令合入 user 消息
-                // 实践证明，这是绕过 Google API 404 错误的最稳定方案
                 const res = await apiRequest(config.endpoint, {
-                    model: config.model,
-                    stream: false,
-                    messages: [
-                        { 
-                            role: "user", 
-                            content: `你是一位资深分镜导演。请将剧本拆分为适合视觉表现的独立分镜块。\n${strictFormat}\n\n指令与剧本：\n${finalPrompt}` 
-                        }
-                    ]
+                    model: config.model, stream: false,
+                    messages: [ { role: "user", content: `你是一位资深分镜导演。请将剧本拆分为适合视觉表现的独立分镜块。\n${strictFormat}\n\n指令与剧本：\n${finalPrompt}` } ]
                 });   
-               // 获取大模型返回的原始字符串
-                // 获取大模型返回的原始字符串
                 let rawText = "";
                 if (res.choices && res.choices[0].message) rawText = res.choices[0].message.content;
                 else if (res.candidates && res.candidates[0].content) rawText = res.candidates[0].content.parts[0].text;
                 else throw new Error("无法解析API返回的数据格式");
 
-                console.log("📦 AI 原始返回内容:", rawText);
-
-                // 🌟 1. 清理 Markdown 标记
                 let cleanJson = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-                // 🌟 2. 找到真正的 JSON 起点 (定位第一个 { 或 [)
                 const startIdx = Math.max(0, cleanJson.search(/[\{\[]/));
                 cleanJson = cleanJson.substring(startIdx);
 
-                // 🌟 3. 终极容错解析：暴力剥离 AI 幻觉产生的多余括号
                 let parsed = null;
                 let endChar = cleanJson.startsWith('[') ? ']' : '}';
                 let lastIdx = cleanJson.lastIndexOf(endChar);
 
                 while (lastIdx !== -1) {
-                    try {
-                        let candidate = cleanJson.substring(0, lastIdx + 1);
-                        parsed = JSON.parse(candidate);
-                        break; // 🌟 只要解析成功，立刻跳出循环
-                    } catch (e) {
-                        // 解析失败，说明当前最末尾的括号是多余的（比如幻觉产生的 } } ）
-                        // 往前寻找上一个 } 或 ] 继续尝试
-                        lastIdx = cleanJson.lastIndexOf(endChar, lastIdx - 1);
-                    }
+                    try { parsed = JSON.parse(cleanJson.substring(0, lastIdx + 1)); break; } 
+                    catch (e) { lastIdx = cleanJson.lastIndexOf(endChar, lastIdx - 1); }
                 }
+                if (!parsed) throw new Error("模型返回内容损坏，无法修复为 JSON。");
 
-                if (!parsed) {
-                    console.error("❌ JSON 彻底解析失败:", cleanJson);
-                    throw new Error("模型返回内容损坏，无法修复为 JSON。");
-                }
-
-                // 🌟 4. 兼容性提取 (防止 AI 把数组包裹在 {"storyboard": [...]} 等千奇百怪的壳里)
                 let segments = [];
-                if (Array.isArray(parsed)) {
-                    segments = parsed;
-                } else if (parsed.storyboard && Array.isArray(parsed.storyboard)) {
-                    segments = parsed.storyboard;
-                } else if (parsed.data && Array.isArray(parsed.data)) {
-                    segments = parsed.data;
-                } else if (Object.values(parsed)[0] && Array.isArray(Object.values(parsed)[0])) {
-                    segments = Object.values(parsed)[0];
-                } else {
-                    segments = [parsed]; 
-                }
+                if (Array.isArray(parsed)) segments = parsed;
+                else if (parsed.storyboard && Array.isArray(parsed.storyboard)) segments = parsed.storyboard;
+                else if (parsed.data && Array.isArray(parsed.data)) segments = parsed.data;
+                else if (Object.values(parsed)[0] && Array.isArray(Object.values(parsed)[0])) segments = Object.values(parsed)[0];
+                else segments = [parsed]; 
                 
                 if(segments.length === 0) throw new Error("未提取到任何分镜数据。");
 
                 storyboardData = segments.map((seg, i) => ({
                     id: seg.id || (i + 1).toString(),
                     text: seg.text || seg.description || JSON.stringify(seg),
-                    htmlText: "", 
-                    duration: 15, 
-                    images: [] 
+                    htmlText: "", duration: 15, images: [] 
                 }));
                 
                 autoMatchImages();
                 renderStoryboardUI();
-                log("✅ 自动拆分完成。已根据关键词自动关联场景与角色图片。");
-} catch (e) {
-                let errMsg = e.message;
-                // 🌟 将 503 (服务器繁忙) 和 500 也加入自动切换保护伞
-                if (errMsg.includes('limit: 0') || errMsg.includes('429') || errMsg.includes('404') || errMsg.includes('503') || errMsg.includes('500')) {
-                    log(`⚠️ 触发 Google 接口限制或服务器繁忙，已自动为您切换至 DeepSeek。`);
-                    alert(`Google 服务器当前繁忙或受限 (High Demand)。\n\n系统已为您自动切换至稳定的【DeepSeek】模型，请再次点击“自动拆分”即可！`);
-                    
-                    // 同步修改页面显示并存入数据库
+                await saveCurrentState(); // 自动拆完立刻上云！
+                log("✅ 自动拆分完成，进度已同步。");
+            } catch (e) {
+                if (e.message.includes('limit: 0') || e.message.includes('429') || e.message.includes('404') || e.message.includes('503') || e.message.includes('500')) {
+                    alert(`Google 服务器当前繁忙。\n系统已自动切换至【DeepSeek】，请再次点击“自动拆分”！`);
                     document.getElementById('llmModelSelect').value = 'deepseek-chat';
-                    await DB.set('llmModelSelect', 'deepseek-chat');
-                } else {
-                    log("❌ 拆分异常: " + errMsg);
-                    alert("拆分失败：" + errMsg);
-                }
-           
-            } finally {
-                btn.disabled = false;
-                btn.innerText = "✨ AI 自动拆分剧本";
-            }
+                } else { alert("拆分失败：" + e.message); }
+            } finally { btn.disabled = false; btn.innerText = "✨ AI 自动拆分剧本"; }
         }
 
         function autoMatchImages() {
@@ -454,44 +356,22 @@ if (!(await checkAndDeductCredits('split_script', selectedLlm))) return;
             });
         }
 
-       // 🌟 新增：在指定格子的正下方插入新分镜块
         function insertStoryboardBlock(index) {
-            syncRichTextState(); // 必须先保存所有文本，防止重绘时丢失正在输入的内容
-            
-            // 使用时间戳确保插入的 ID 绝对唯一
+            syncRichTextState(); 
             const newId = "手动_" + Date.now().toString().slice(-5); 
-            const newBlock = {
-                id: newId,
-                text: "【场景】：待填写\n【情绪点】：待填写\n【脚本描述】：待填写",
-                htmlText: "",
-                duration: 15,
-                images: []
-            };
-            
-            // 在当前索引的下一个位置插入新模块
-            storyboardData.splice(index + 1, 0, newBlock);
-            renderStoryboardUI();
+            storyboardData.splice(index + 1, 0, { id: newId, text: "待填写", htmlText: "", duration: 15, images: [] });
+            renderStoryboardUI(); saveCurrentState();
         }
 
-        // 🌟 更新：修复底部全局添加按钮的 ID 冲突和状态丢失问题
         function addManualStoryboard() {
             if (storyboardData.length === 0) document.getElementById('storyboardList').innerHTML = "";
-            syncRichTextState(); // 同样先保存文本状态
-            
-            const newId = "手动_" + Date.now().toString().slice(-5);
-            storyboardData.push({
-                id: newId,
-                text: "【场景】：待填写\n【情绪点】：待填写\n【脚本描述】：待填写",
-                htmlText: "",
-                duration: 15,
-                images: []
-            });
-            
-            renderStoryboardUI();
+            syncRichTextState(); 
+            storyboardData.push({ id: "手动_" + Date.now().toString().slice(-5), text: "待填写", htmlText: "", duration: 15, images: [] });
+            renderStoryboardUI(); saveCurrentState();
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
         }
 
-function renderStoryboardUI() {
+        function renderStoryboardUI() {
             const listDiv = document.getElementById('storyboardList');
             if (storyboardData.length === 0) {
                 listDiv.innerHTML = `<div style="color:#909399; text-align:center; padding: 60px; background:#f8f9fa; border-radius:12px; border:2px dashed #ebeef5;">点击右上角按钮开始拆分剧本。</div>`;
@@ -504,33 +384,23 @@ function renderStoryboardUI() {
                         <div style="font-size: 15px; font-weight: bold; color: #1d2129;">分镜块 ${row.id}</div>
                         <div style="display:flex; gap:15px; align-items:center; font-size:12px; color:#86909c;">
                             <span>时长:
-                                <select onchange="updateSbDuration('${row.id}', this.value)">
+                                <select onchange="updateSbDuration('${row.id}', this.value); saveCurrentState();">
                                     <option value="5" ${row.duration==5?'selected':''}>5s</option>
-                                    <option value="6" ${row.duration==6?'selected':''}>6s</option>
-                                    <option value="7" ${row.duration==7?'selected':''}>7s</option>
-                                    <option value="8" ${row.duration==8?'selected':''}>8s</option>
-                                    <option value="9" ${row.duration==9?'selected':''}>9s</option>
                                     <option value="10" ${row.duration==10?'selected':''}>10s</option>
-                                    <option value="11" ${row.duration==11?'selected':''}>11s</option>
-                                    <option value="12" ${row.duration==12?'selected':''}>12s</option>
-                                    <option value="13" ${row.duration==13?'selected':''}>13s</option>
-                                    <option value="14" ${row.duration==14?'selected':''}>14s</option>
                                     <option value="15" ${row.duration==15?'selected':''}>15s</option>
                                 </select>
                             </span>
                             <span style="color:#f53f3f; cursor:pointer;" onclick="deleteStoryboard(${index})">🗑️ 删除</span>
                         </div>
                     </div>
-                    
-                    <div class="rich-input" id="sb_text_${row.id}" contenteditable="true" data-placeholder="输入表演细节... 输入 @ 插入镜内图片">${row.htmlText || row.text}</div>
-                    
+                    <div class="rich-input" id="sb_text_${row.id}" contenteditable="true" data-placeholder="输入表演细节... 输入 @ 插入镜内图片" onblur="saveCurrentState()">${row.htmlText || row.text}</div>
                     <div style="padding-top: 15px; border-top: 1px dashed #f2f3f5;">
                         <div style="font-size:12px; font-weight:bold; margin-bottom:10px; color:#4e5969;">
                             🖼️ 镜内参考图片
                             <div style="float:right; display:flex; gap:15px;">
-                                <span style="cursor:pointer; color:#722ed1; font-weight:bold;" onclick="openImageGenModal('${row.id}')" title="打开高级生图工作台">🎨 AI 独立生图</span>
-                                <span style="cursor:pointer; color:var(--primary);" onclick="openGlobalImport('${row.id}')" title="从第一步中查找未被自动匹配的图片">📥 导入全局资产</span>
-                                <span style="cursor:pointer; color:var(--primary);" onclick="uploadSbImg('${row.id}')" title="上传本地图片">⊕ 本地上传</span>
+                                <span style="cursor:pointer; color:#722ed1; font-weight:bold;" onclick="openImageGenModal('${row.id}')">🎨 AI 独立生图</span>
+                                <span style="cursor:pointer; color:var(--primary);" onclick="openGlobalImport('${row.id}')">📥 导入全局资产</span>
+                                <span style="cursor:pointer; color:var(--primary);" onclick="uploadSbImg('${row.id}')">⊕ 本地上传</span>
                             </div>
                         </div>
                         <div style="display:flex; flex-wrap:wrap; gap:12px;">
@@ -540,7 +410,6 @@ function renderStoryboardUI() {
                                     <div onclick="removeSbImg('${row.id}', ${imgIdx})" style="position:absolute; top:4px; right:4px; background:rgba(245,63,63,0.9); color:#fff; border-radius:50%; width:18px; height:18px; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:10px;">×</div>
                                 </div>
                             `).join('')}
-                            ${row.images.length === 0 ? '<span style="font-size:12px; color:#c9cdd4;">暂无镜内图片，请点击右侧导入全局资产或本地上传。</span>' : ''}
                         </div>
                     </div>
                 </div>
@@ -552,22 +421,29 @@ function renderStoryboardUI() {
             document.querySelectorAll('.rich-input').forEach(el => { el.addEventListener('input', handleRichInput); });
         }
 
-// ==========================================
-        // 🌟 升级：项目级资产库弹窗与云端拉取逻辑
-        // ==========================================
+        // 🌟 完美修复的资产导入弹窗
         async function openGlobalImport(rowId) {
             currentImportRowId = rowId;
             document.getElementById('globalImportModal').style.display = 'flex';
-            loadLibraryTab('shared'); // 默认加载共享库
+            loadLibraryTab('characters'); // 默认显示人物
         }
 
         async function loadLibraryTab(tabType) {
-            // 切换按钮样式
-            document.getElementById('tabShared').className = tabType === 'shared' ? 'btn btn-primary' : 'btn btn-outline';
-            document.getElementById('tabPrivate').className = tabType === 'private' ? 'btn btn-primary' : 'btn btn-outline';
+            ['characters', 'scenes', 'props', 'effects', 'private'].forEach(t => {
+                const btn = document.getElementById('tab_' + t);
+                if (btn) {
+                    if (t === 'private') {
+                        btn.className = (t === tabType) ? 'btn btn-primary' : 'btn btn-outline';
+                        btn.style.color = (t === tabType) ? '#fff' : '#722ed1';
+                        btn.style.borderColor = (t === tabType) ? 'transparent' : '#722ed1';
+                    } else {
+                        btn.className = (t === tabType) ? 'btn btn-primary' : 'btn btn-outline';
+                    }
+                }
+            });
 
             const grid = document.getElementById('globalImportGrid');
-            grid.innerHTML = "<div style='width:100%; text-align:center; padding:40px; color:#86909c;'>⏳ 正在从云端实时拉取资产，请稍候...</div>";
+            grid.innerHTML = "<div style='width:100%; text-align:center; padding:40px; color:#86909c;'>⏳ 正在从云端拉取资产...</div>";
 
             try {
                 const ctx = await DB.get('active_context');
@@ -576,127 +452,70 @@ function renderStoryboardUI() {
                 const { data: { user } } = await window.cloudSupabase.auth.getUser();
                 let pool = [];
 
-                if (tabType === 'shared') {
-                    // 读取当前项目的共享资产
+                if (tabType !== 'private') {
                     const { data } = await window.cloudSupabase.from('shared_projects').select('assets').eq('id', ctx.projectId).single();
                     if (data && data.assets) {
-                        const ast = data.assets;
-                        ['characters', 'props', 'effects'].forEach(c => {
-                            if(ast[c]) ast[c].forEach(x => { if(x.img) pool.push({name: x.name, url: x.img, label: '共享资产'}) });
-                        });
-                        if(ast.scenes) ast.scenes.forEach(s => { 
-                            if(s.forwardImg) pool.push({name: s.name, url: s.forwardImg, label: '场景正视'});
-                            if(s.reverseImg) pool.push({name: s.name, url: s.reverseImg, label: '场景反打'});
-                        });
+                        let ast = typeof data.assets === 'string' ? JSON.parse(data.assets) : data.assets;
+                        if (ast[tabType]) {
+                            ast[tabType].forEach(item => {
+                                if (tabType === 'scenes') {
+                                    if (item.forwardImg) pool.push({ name: item.name+'-正视', url: item.forwardImg });
+                                    if (item.reverseImg) pool.push({ name: item.name+'-反打', url: item.reverseImg });
+                                } else {
+                                    if (item.img) pool.push({ name: item.name, url: item.img });
+                                }
+                                if (item.refImages && item.refImages.length > 0) {
+                                    item.refImages.forEach((rUrl, i) => { pool.push({ name: `${item.name}-参考${i+1}`, url: rUrl }); });
+                                }
+                            });
+                        }
                     }
                 } else {
-                    // 读取自己的绝对私有关键帧（生图工作台生成）
-                    const { data } = await window.cloudSupabase.from('private_keyframes')
-                        .select('img_url')
-                        .eq('project_id', ctx.projectId)
-                        .eq('user_email', user.email);
-                    
-                    if (data) {
-                        data.forEach((k, i) => pool.push({ name: `关键帧 ${i+1}`, url: k.img_url, label: '私有关键帧' }));
-                    }
+                    const { data } = await window.cloudSupabase.from('private_keyframes').select('img_url').eq('project_id', ctx.projectId).eq('user_email', user.email);
+                    if (data) data.forEach((k, i) => pool.push({ name: `关键帧 ${i+1}`, url: k.img_url }));
                 }
 
-                if (pool.length === 0) {
-                    grid.innerHTML = "<div style='width:100%; text-align:center; padding:50px; color:#c9cdd4; border:2px dashed #eee; border-radius:12px;'>此分类下暂无资产数据。</div>";
-                    return;
-                }
+                if (pool.length === 0) return grid.innerHTML = "<div style='width:100%; text-align:center; padding:50px; color:#c9cdd4;'>此分类下暂无资产数据。</div>";
 
                 grid.innerHTML = pool.map(item => `
                     <div style="width:110px; cursor:pointer; text-align:center; padding:5px; border:2px solid transparent; border-radius:8px; transition:0.2s;" 
                          onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'"
                          onclick="confirmGlobalImport('${item.url}')">
                         <img src="${item.url}" style="width:100px; height:100px; object-fit:cover; border-radius:6px; border:1px solid #e5e6eb;">
-                        <div style="font-size:11px; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#4e5969;">${item.name}</div>
-                        <div style="font-size:10px; color:var(--primary); background:#e8f3ff; border-radius:4px; display:inline-block; padding:2px 6px; margin-top:4px;">${item.label}</div>
+                        <div style="font-size:11px; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.name}</div>
                     </div>
                 `).join('');
 
-            } catch (e) {
-                grid.innerHTML = `<div style='width:100%; text-align:center; padding:20px; color:#f53f3f;'>❌ 加载失败: ${e.message}</div>`;
-            }
+            } catch (e) { grid.innerHTML = `<div style='width:100%; text-align:center; padding:20px; color:#f53f3f;'>❌ 加载失败: ${e.message}</div>`; }
         }
 
         function confirmGlobalImport(b64) {
             syncRichTextState(); 
             const row = storyboardData.find(x => x.id == currentImportRowId);
-            // 查重：避免同一个格子导入两张相同的图
-            if (row && !row.images.includes(b64)) {
-                row.images.push(b64);
-                renderStoryboardUI();
-            }
+            if (row && !row.images.includes(b64)) { row.images.push(b64); renderStoryboardUI(); saveCurrentState(); }
             closeGlobalImport();
         }
 
-        function closeGlobalImport() {
-            document.getElementById('globalImportModal').style.display = 'none';
-            currentImportRowId = null;
-        }
-
-        function deleteStoryboard(index) {
-            if (confirm("确定删除此镜头？")) {
-                syncRichTextState();
-                storyboardData.splice(index, 1);
-                renderStoryboardUI();
-            }
-        }
-
+        function closeGlobalImport() { document.getElementById('globalImportModal').style.display = 'none'; currentImportRowId = null; }
+        function deleteStoryboard(index) { if (confirm("确定删除此镜头？")) { syncRichTextState(); storyboardData.splice(index, 1); renderStoryboardUI(); saveCurrentState(); } }
         function updateSbDuration(id, val) { const row = storyboardData.find(x => x.id == id); if(row) row.duration = parseInt(val); }
         
-// 🌟 升级：本地上传的分镜草图直接存为“私有关键帧”
         function uploadSbImg(id) {
             triggerUpload(async (b64) => {
-                syncRichTextState();
-                log("⏳ 正在同步分镜草图至云端...");
-                
+                syncRichTextState(); log("⏳ 同步至云盘...");
                 try {
-                    // 1. 上传物理文件到云盘，获取永久链接
                     b64 = await window.uploadMediaToCloud(b64, 'png');
-                    
-                    // 2. 获取当前项目归属和用户身份
                     const ctx = await DB.get('active_context');
                     const { data: { user } } = await window.cloudSupabase.auth.getUser();
-                    
-                    // 3. 🌟 绝对私有写入：存入 private_keyframes 表
-                    if (ctx && ctx.projectId && user) {
-                        await window.cloudSupabase.from('private_keyframes').insert([{
-                            project_id: ctx.projectId,
-                            user_email: user.email,
-                            img_url: b64
-                        }]);
-                        log(`✅ 已安全保存至您的【私有关键帧库】，团队不可见！`);
-                    }
-
-                    // 4. 将图片插入当前的分镜格子中
+                    if (ctx && ctx.projectId && user) await window.cloudSupabase.from('private_keyframes').insert([{ project_id: ctx.projectId, user_email: user.email, img_url: b64 }]);
                     const row = storyboardData.find(x => x.id == id);
-                    if(row) { 
-                        row.images.push(b64); 
-                        // 同步一下文本框防止丢失，并保存页面进度
-                        await DB.set('storyboardData', storyboardData);
-                        renderStoryboardUI(); 
-                    }
-                } catch (err) {
-                    console.error("上传并保存关键帧失败:", err);
-                    log(`❌ 上传失败: ${err.message}`);
-                }
+                    if(row) { row.images.push(b64); renderStoryboardUI(); saveCurrentState(); }
+                } catch (err) { log(`❌ 上传失败: ${err.message}`); }
             });
         }   
-        function removeSbImg(id, imgIdx) {
-            syncRichTextState();
-            const row = storyboardData.find(x => x.id == id);
-            if(row) { row.images.splice(imgIdx, 1); renderStoryboardUI(); }
-        }
 
-        function syncRichTextState() {
-            storyboardData.forEach(row => {
-                const richEl = document.getElementById(`sb_text_${row.id}`);
-                if(richEl) row.htmlText = richEl.innerHTML;
-            });
-        }
+        function removeSbImg(id, imgIdx) { syncRichTextState(); const row = storyboardData.find(x => x.id == id); if(row) { row.images.splice(imgIdx, 1); renderStoryboardUI(); saveCurrentState(); } }
+        function syncRichTextState() { storyboardData.forEach(row => { const richEl = document.getElementById(`sb_text_${row.id}`); if(richEl) row.htmlText = richEl.innerHTML; }); }
 
         function handleRichInput(e) {
             const sel = window.getSelection();
@@ -710,107 +529,28 @@ function renderStoryboardUI() {
                 savedRange = range.cloneRange();
                 const rect = range.getBoundingClientRect();
                 const menu = document.getElementById('mentionMenu');
-                menu.style.display = 'block';
-                menu.style.left = rect.left + 'px';
-                menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+                menu.style.display = 'block'; menu.style.left = rect.left + 'px'; menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
                 document.getElementById('mentionMenuGrid').innerHTML = row.images.map((b64, index) => `
-                    <div style="aspect-ratio:1; border-radius:4px; overflow:hidden; cursor:pointer; border:1px solid #f2f3f5;" onmousedown="event.preventDefault();insertMentionPill('${b64}', '图${index+1}')">
-                        <img src="${b64}" style="width:100%;height:100%;object-fit:cover;">
-                    </div>
+                    <div style="aspect-ratio:1; border-radius:4px; overflow:hidden; cursor:pointer; border:1px solid #f2f3f5;" onmousedown="event.preventDefault();insertMentionPill('${b64}', '图${index+1}')"><img src="${b64}" style="width:100%;height:100%;object-fit:cover;"></div>
                 `).join('');
-            } else {
-                document.getElementById('mentionMenu').style.display = 'none';
-            }
+            } else { document.getElementById('mentionMenu').style.display = 'none'; }
         }
 
         function insertMentionPill(b64, name) {
-            document.getElementById('mentionMenu').style.display = 'none';
-            const sel = window.getSelection();
-            sel.removeAllRanges(); sel.addRange(savedRange);
-            savedRange.setStart(savedRange.startContainer, savedRange.startOffset - 1);
-            savedRange.deleteContents();
-            const span = document.createElement('span');
-            span.className = 'inline-pill'; span.contentEditable = 'false'; span.setAttribute('data-b64', b64);
+            document.getElementById('mentionMenu').style.display = 'none'; const sel = window.getSelection();
+            sel.removeAllRanges(); sel.addRange(savedRange); savedRange.setStart(savedRange.startContainer, savedRange.startOffset - 1); savedRange.deleteContents();
+            const span = document.createElement('span'); span.className = 'inline-pill'; span.contentEditable = 'false'; span.setAttribute('data-b64', b64);
             span.innerHTML = `<img src="${b64}"><span>${name}</span>`;
-            span.onmouseenter = (e) => {
-                const hp = document.getElementById('hoverPreview');
-                document.getElementById('hoverImg').src = b64;
-                hp.style.display = 'block'; hp.style.left = (e.clientX + 15) + 'px'; hp.style.top = (e.clientY + 15) + 'px';
-            };
+            span.onmouseenter = (e) => { const hp = document.getElementById('hoverPreview'); document.getElementById('hoverImg').src = b64; hp.style.display = 'block'; hp.style.left = (e.clientX + 15) + 'px'; hp.style.top = (e.clientY + 15) + 'px'; };
             span.onmouseleave = () => document.getElementById('hoverPreview').style.display = 'none';
-            savedRange.insertNode(span);
-            savedRange.setStartAfter(span); savedRange.insertNode(document.createTextNode('\u00A0'));
+            savedRange.insertNode(span); savedRange.setStartAfter(span); savedRange.insertNode(document.createTextNode('\u00A0'));
             savedRange.collapse(false); sel.removeAllRanges(); sel.addRange(savedRange);
         }
 
-        async function goToStep3() {
-            const btn = document.getElementById('btnNextStep');
-            const origText = btn.innerText;
-            btn.innerText = "⏳ 正在保存无损高清资产...";
-            btn.disabled = true;
-
-            try {
-                for (let row of storyboardData) {
-                    const richEl = document.getElementById(`sb_text_${row.id}`);
-                    if(richEl) {
-                        let pText = ""; let localImgs = [];
-                        row.htmlText = richEl.innerHTML; 
-                        richEl.childNodes.forEach(node => {
-                            if (node.nodeType === Node.TEXT_NODE) pText += node.textContent;
-                            else if (node.nodeType === Node.ELEMENT_NODE) {
-                                if (node.classList.contains('inline-pill')) localImgs.push(node.getAttribute('data-b64'));
-                                else pText += node.innerText;
-                            }
-                        });
-                        row.text = pText.trim(); 
-                        row.images = [...new Set([...row.images, ...localImgs])];
-                    }
-                }
-                
-                await DB.set('storyboardData', storyboardData);
-                await DB.set('globalRatio', document.getElementById('g_ratio').value);
-                
-                location.href = 'module3.html';
-            } catch (e) {
-                alert("保存异常：" + e.message);
-                console.error(e);
-                btn.innerText = origText;
-                btn.disabled = false;
-            }
-        } // 🌟 之前就是不小心删掉了这个关键的闭合大括号！
-
-function logout() {
-    localStorage.clear();
-    location.href = '../login.html'; // 🌟 注意这里多了 ../
-}
-
-        // ==========================================
-        // 🌟 新增：生图独立工作台弹窗控制逻辑
-        // ==========================================
-        function openImageGenModal(rowId) {
-            syncRichTextState(); // 先保存一下当前输入的文本
-            // 给 iframe 赋予地址，并把分镜 ID 传过去
-            document.getElementById('imageGenFrame').src = `image_gen_window.html?rowId=${rowId}`;
-            // 显示弹窗
-            document.getElementById('imageGenModalBg').style.display = 'flex';
-        }
-
-        window.closeImageGenModal = function() {
-            document.getElementById('imageGenModalBg').style.display = 'none';
-            document.getElementById('imageGenFrame').src = ''; // 清空以释放内存
-        }
-
-        // 供子页面(iframe)调用：将生成的图片自动存入对应的分镜格子
-        window.addGeneratedImageToRow = function(rowId, b64) {
-            const row = storyboardData.find(x => x.id == rowId);
-            if (row && !row.images.includes(b64)) {
-                row.images.push(b64);
-                renderStoryboardUI();
-                log(`✅ 独立生图成功，已自动加入分镜块 ${rowId}！`);
-            }
-            closeImageGenModal();
-        };
-
+        function logout() { localStorage.clear(); location.href = '../index.html'; }
+        function openImageGenModal(rowId) { syncRichTextState(); document.getElementById('imageGenFrame').src = `image_gen_window.html?rowId=${rowId}`; document.getElementById('imageGenModalBg').style.display = 'flex'; }
+        window.closeImageGenModal = function() { document.getElementById('imageGenModalBg').style.display = 'none'; document.getElementById('imageGenFrame').src = ''; }
+        window.addGeneratedImageToRow = function(rowId, b64) { const row = storyboardData.find(x => x.id == rowId); if (row && !row.images.includes(b64)) { row.images.push(b64); renderStoryboardUI(); saveCurrentState(); } closeImageGenModal(); };
     </script>
 </body>
 </html>
