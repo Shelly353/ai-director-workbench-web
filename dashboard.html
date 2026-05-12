@@ -7,17 +7,6 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <link rel="stylesheet" href="css/style.css">
-    
-    <script>
-        window.onerror = function(msg, source, lineno, colno, error) {
-            alert("🚨 页面致命错误！\n\n原因: " + msg + "\n行号: " + lineno + "\n\n请把这个弹窗截图发给工程师。");
-            return false;
-        };
-        window.onunhandledrejection = function(event) {
-            alert("🚨 异步请求崩溃！\n\n原因: " + (event.reason ? event.reason.message || event.reason : "未知"));
-        };
-    </script>
-
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { background: #f4f5f9; margin: 0; padding-bottom: 60px; font-family: system-ui, -apple-system, sans-serif; }
@@ -85,15 +74,10 @@
         </div>
     </div>
 
-    <script src="js/app.js?v=2000"></script>
+    <script src="js/app.js?v=3000"></script>
     <script>
-        // 🌟 核心修复：将全局的 let 和 const 全部降维为 var，彻底免疫页面双重加载导致的白屏崩溃！
-        var myDB;
-        if (typeof window.supabaseClient !== 'undefined') {
-            myDB = window.supabaseClient;
-        } else if (typeof window.supabase !== 'undefined') {
-            myDB = window.supabase.createClient('https://ywigafhbswrovuhvnkty.supabase.co', 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ');
-        }
+        // 🌟 核心修复 1：直接借用 app.js 初始化的实例，绝不重复创建！
+        var myDB = window.cloudSupabase;
 
         var WORKSPACE_KEYS = ['scriptText', 'scriptSummary', 'storyboardData', 'extractedData', 'globalRatio', 'llmModelSelect', 'llm_config', 'charactersData'];
         var projects = [];
@@ -103,7 +87,7 @@
 
         window.onload = async () => {
             const userId = localStorage.getItem('userId');
-            if (!userId) return window.location.replace('index.html');
+            if (!userId || !myDB) return window.location.replace('index.html');
 
             const { data: { user } } = await myDB.auth.getUser();
             if (!user) return window.location.replace('index.html');
@@ -155,23 +139,18 @@
 
             projects = data.map(p => {
                 let safeData = {};
-                let isString = false;
+                // 兼容读取老数据，但废弃 isString 标记，不再把新数据转成字符串
                 if (p.data) {
                     try { 
-                        if (typeof p.data === 'string') { safeData = JSON.parse(p.data); isString = true; } 
+                        if (typeof p.data === 'string') { safeData = JSON.parse(p.data); } 
                         else { safeData = p.data; }
                     } catch(e) {}
-                }
-                let safeAssets = {};
-                if (p.assets) {
-                    try { safeAssets = typeof p.assets === 'string' ? JSON.parse(p.assets) : p.assets; } catch(e) {}
                 }
                 
                 return {
                     id: p.id, name: p.name, 
                     episodes: Array.isArray(safeData.episodes) ? safeData.episodes : [], 
-                    data: safeData, _isString: isString, assets: safeAssets,
-                    my_role: p.my_role, my_status: p.my_status, members: p.members || []
+                    data: safeData, my_role: p.my_role, my_status: p.my_status, members: p.members || []
                 };
             });
             renderView();
@@ -229,39 +208,28 @@
         }
 
         async function createEpisode() {
-            // 测试报警，完成后可删
-            alert("1. 按钮点击成功！开始执行创建流程。");
-
             try {
                 const proj = projects.find(p => String(p.id) === String(activeProjectId));
-                if (!proj) {
-                    alert("❌ 错误：找不到当前项目数据。");
-                    return;
-                }
+                if (!proj) return alert("❌ 错误：找不到当前项目数据。");
 
                 const name = prompt("请输入新分集的名称：", "第 " + (proj.episodes.length + 1) + " 集");
                 if (!name || !name.trim()) return;
 
                 const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
-                
                 proj.episodes.push(newEp);
                 renderView();
-                alert("2. 界面更新完毕！正在准备发送数据到云端...");
 
+                // 🌟 核心修复 2：直接传入 Object 原生数据对象，摒弃 JSON.stringify
                 let payload = { ...proj.data, episodes: proj.episodes };
-                let finalData = proj._isString ? JSON.stringify(payload) : payload;
 
-                const { error } = await myDB.from('shared_projects').update({ data: finalData }).eq('id', activeProjectId);
+                const { error } = await myDB.from('shared_projects').update({ data: payload }).eq('id', activeProjectId);
                 
                 if (error) {
-                    alert("3. ❌ 云端写入报错: " + error.message);
+                    alert("云端写入报错: " + error.message);
                     proj.episodes.pop(); renderView(); 
-                } else {
-                    alert("3. ✅ 恭喜！云端写入成功！");
                 }
-
             } catch (err) {
-                alert("❌ 代码运行中断，错误原因: " + err.message);
+                alert("❌ 操作异常: " + err.message);
             }
         }
 
@@ -278,8 +246,7 @@
             if (newName && newName.trim()) {
                 const updatedEpisodes = proj.episodes.map(e => String(e.id) === String(epId) ? { ...e, name: newName.trim() } : e);
                 let payload = { ...proj.data, episodes: updatedEpisodes };
-                let finalData = proj._isString ? JSON.stringify(payload) : payload;
-                await myDB.from('shared_projects').update({ data: finalData }).eq('id', activeProjectId);
+                await myDB.from('shared_projects').update({ data: payload }).eq('id', activeProjectId);
                 await loadProjects();
             }
         }
@@ -296,8 +263,7 @@
                 const proj = projects.find(p => String(p.id) === String(activeProjectId));
                 const updatedEpisodes = proj.episodes.filter(e => String(e.id) !== String(epId));
                 let payload = { ...proj.data, episodes: updatedEpisodes };
-                let finalData = proj._isString ? JSON.stringify(payload) : payload;
-                await myDB.from('shared_projects').update({ data: finalData }).eq('id', activeProjectId);
+                await myDB.from('shared_projects').update({ data: payload }).eq('id', activeProjectId);
                 await loadProjects();
             }
         }
@@ -313,12 +279,20 @@
                 if (!ctx || !ctx.projectId || !ctx.epId) return;
 
                 let snapshot = {};
-                for (let key of WORKSPACE_KEYS) snapshot[key] = await DB.get(key);
+                let hasData = false;
+                for (let key of WORKSPACE_KEYS) {
+                    let val = await DB.get(key);
+                    if (val !== null && val !== undefined) hasData = true;
+                    snapshot[key] = val;
+                }
+                
+                // 🌟 核心防卫：没有有效数据坚决不覆写，避免冲刷分集
+                if (!hasData) return;
                 
                 const { data: serverProj } = await myDB.from('shared_projects').select('data').eq('id', ctx.projectId).single();
                 if (serverProj) {
-                    let existingData = {}; let isString = false;
-                    if (typeof serverProj.data === 'string') { try { existingData = JSON.parse(serverProj.data); isString = true; } catch(e) {} } 
+                    let existingData = {}; 
+                    if (typeof serverProj.data === 'string') { try { existingData = JSON.parse(serverProj.data); } catch(e) {} } 
                     else { existingData = serverProj.data || {}; }
 
                     let eps = existingData.episodes || [];
@@ -327,8 +301,7 @@
                     if (idx !== -1) {
                         eps[idx].data = snapshot;
                         let payload = { ...existingData, episodes: eps };
-                        let finalData = isString ? JSON.stringify(payload) : payload;
-                        await myDB.from('shared_projects').update({ data: finalData }).eq('id', ctx.projectId);
+                        await myDB.from('shared_projects').update({ data: payload }).eq('id', ctx.projectId);
                     }
                 }
             } catch (e) {
