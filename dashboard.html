@@ -394,7 +394,7 @@
         <div class="grid-container" id="gridContainer"></div>
     </div>
 
-   <script src="js/app.js"></script>
+<script src="js/app.js?v=999"></script>   
     <script>
         // 🌟 核心修复 1：解决 Multiple instances 冲突！优先借用全局实例，重命名为 cloudDB 防冲突
         const cloudDB = typeof window.supabaseClient !== 'undefined' ? window.supabaseClient : 
