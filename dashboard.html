@@ -203,23 +203,37 @@
 
         async function createEpisode() {
             try {
-                const proj = projects.find(p => String(p.id) === String(activeProjectId));
-                if (!proj) return alert("❌ 错误：找不到当前项目数据。");
+                if (!activeProjectId) return alert("❌ 错误：项目环境丢失。");
 
-                const name = prompt("请输入新分集的名称：", "第 " + (proj.episodes.length + 1) + " 集");
+                // 获取目前显示的分集数，用于默认命名
+                const proj = projects.find(p => String(p.id) === String(activeProjectId));
+                const currentEpCount = proj && proj.episodes ? proj.episodes.length : 0;
+                
+                const name = prompt("请输入新分集的名称：", "第 " + (currentEpCount + 1) + " 集");
                 if (!name || !name.trim()) return;
 
                 const newEp = { id: 'ep_' + Date.now(), name: name.trim(), data: {} };
-                proj.episodes.push(newEp);
-                renderView();
 
-                let payload = { ...proj.data, episodes: proj.episodes };
-                // 🌟 净化：原生传对象 payload
-                const { error } = await myDB.from('shared_projects').update({ data: payload }).eq('id', activeProjectId);
+                // 🌟 核心防覆盖墙：强制从云端实时拉取最新数据，坚决不拿本地旧缓存去覆盖！
+                const { data: serverProj } = await myDB.from('shared_projects').select('data').eq('id', activeProjectId).limit(1);
+                
+                let latestData = {};
+                if (serverProj && serverProj.length > 0 && serverProj[0].data) {
+                    latestData = typeof serverProj[0].data === 'string' ? JSON.parse(serverProj[0].data) : serverProj[0].data;
+                }
+                
+                // 将新分集插入最新的云端数组中
+                let freshEpisodes = latestData.episodes || [];
+                freshEpisodes.push(newEp);
+                latestData.episodes = freshEpisodes;
+
+                // 直接推送最新、最完整的对象
+                const { error } = await myDB.from('shared_projects').update({ data: latestData }).eq('id', activeProjectId);
                 
                 if (error) {
                     alert("云端写入报错: " + error.message);
-                    proj.episodes.pop(); renderView(); 
+                } else {
+                    await loadProjects(); // 🌟 保存成功后立刻重新刷新界面，保持同步
                 }
             } catch (err) {
                 alert("❌ 操作异常: " + err.message);
@@ -281,31 +295,37 @@
                     snapshot[key] = val;
                 }
                 
+                // 如果没抓到任何有价值的数据，直接收手退出
                 if (!hasData) return;
                 
-                const { data: serverProj } = await myDB.from('shared_projects').select('data').eq('id', ctx.projectId).single();
-                if (serverProj) {
+                // 🌟 使用 .limit(1) 安全拉取最新云端项目数据，避开 406 报错
+                const { data: serverProj } = await myDB.from('shared_projects').select('data').eq('id', ctx.projectId).limit(1);
+                
+                if (serverProj && serverProj.length > 0) {
                     let existingData = {}; 
-                    if (typeof serverProj.data === 'string') { try { existingData = JSON.parse(serverProj.data); } catch(e) {} } 
-                    else { existingData = serverProj.data || {}; }
+                    if (serverProj[0].data) {
+                        existingData = typeof serverProj[0].data === 'string' ? JSON.parse(serverProj[0].data) : serverProj[0].data;
+                    }
 
                     let eps = existingData.episodes || [];
                     const idx = eps.findIndex(e => String(e.id) === String(ctx.epId));
                     
                     if (idx !== -1) {
                         eps[idx].data = snapshot;
-                        let payload = { ...existingData, episodes: eps };
-                        // 🌟 净化
-                        await myDB.from('shared_projects').update({ data: payload }).eq('id', ctx.projectId);
+                        existingData.episodes = eps; // 只更新当前对应的分集内部数据
+                        
+                        // 写回云端
+                        await myDB.from('shared_projects').update({ data: existingData }).eq('id', ctx.projectId);
                     }
                 }
             } catch (e) {
+                console.error("同步失败: ", e);
             } finally {
+                // 不管成功失败，最后必须擦除活动上下文
                 for (let key of WORKSPACE_KEYS) await DB.set(key, null);
                 await DB.set('active_context', null);
             }
         }
-
         function openProject(id) { activeProjectId = id; currentView = 'episodes'; localStorage.setItem('ai_director_active_project', id); renderView(); }
         function backToProjects() { activeProjectId = null; currentView = 'projects'; localStorage.removeItem('ai_director_active_project'); renderView(); }
         
