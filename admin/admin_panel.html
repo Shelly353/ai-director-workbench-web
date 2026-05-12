@@ -8,23 +8,19 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        /* 强制解锁全局滚动 */
         html, body { overflow-y: auto !important; height: auto !important; min-height: 100vh; background: #f4f5f9; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 60px; }
         .admin-container { max-width: 1400px; margin: 20px auto; padding: 0 20px; }
         
-        /* 顶部项目切换 Tab (一级) */
         .project-tabs { display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 10px; border-bottom: 1px solid #e5e6eb; }
         .p-tab-btn { padding: 8px 20px; border-radius: 20px; border: 1px solid #c9cdd4; background: #fff; font-size: 14px; font-weight: bold; color: #4e5969; cursor: pointer; transition: 0.2s; white-space: nowrap; }
         .p-tab-btn:hover { border-color: var(--primary); color: var(--primary); }
         .p-tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: 0 4px 10px rgba(22, 119, 255, 0.2); }
 
-        /* 视图切换 Tab (二级) */
         .view-tabs { display: flex; gap: 30px; margin-bottom: 25px; }
         .v-tab-btn { background: transparent; border: none; font-size: 16px; font-weight: bold; color: #86909c; padding: 10px 0; border-bottom: 3px solid transparent; cursor: pointer; transition: 0.2s; }
         .v-tab-btn:hover { color: var(--primary); }
         .v-tab-btn.active { color: var(--primary); border-bottom: 3px solid var(--primary); }
 
-        /* 核心卡片与布局 */
         .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 25px; }
         .metric-card { background: #fff; padding: 25px 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); text-align: center; border: 1px solid #e5e6eb; position: relative; overflow: hidden; }
         .metric-card::before { content:''; position:absolute; top:0; left:0; width:4px; height:100%; background: var(--primary); }
@@ -35,6 +31,399 @@
         .chart-card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #e5e6eb; display: flex; flex-direction: column; }
         .chart-title { margin: 0 0 15px 0; font-size: 15px; color: #1d2129; font-weight: bold; display: flex; justify-content: space-between; align-items: center;}
         .chart-container { flex: 1; min-height: 280px; position: relative; }
+
+        .data-table-wrap { background: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #e5e6eb; overflow: hidden; margin-bottom: 25px; }
+        .data-table-header { padding: 15px 20px; background: #fafafa; border-bottom: 1px solid #e5e6eb; font-weight: bold; color: #1d2129; display: flex; justify-content: space-between;}
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th, .data-table td { padding: 12px 20px; text-align: left; border-bottom: 1px solid #f2f3f5; font-size: 13px; }
+        .data-table th { background: #fff; font-weight: 600; color: #86909c; }
+        .data-table tr:hover { background: #f8fbff; }
+        
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .badge-img { background: #e8f3ff; color: #1677ff; border: 1px solid #bcdcff; }
+        .badge-txt { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+
+        .view-section { display: none; animation: fadeIn 0.3s ease; }
+        .view-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        select.member-select { padding: 8px 15px; border-radius: 6px; border: 1px solid #dcdfe6; outline: none; font-weight: bold; color: var(--primary); }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="breadcrumb"><span class="breadcrumb-link" onclick="location.href='../dashboard.html'">🏠 返回工作台</span> <span style="margin:0 10px; color:#c9cdd4;">/</span> 📈 剧组 ERP 数据指挥舱</div>
+        <button class="btn btn-outline" style="border-color:#1677ff; color:#1677ff;" onclick="exportToExcel()">📥 导出当前数据包</button>
+    </div>
+
+    <div class="admin-container">
+        
+        <div class="project-tabs" id="projectTabs">
+            <button class="p-tab-btn active" onclick="switchProject('all')">全盘总览</button>
+        </div>
+
+        <div class="view-tabs">
+            <button class="v-tab-btn active" onclick="switchView('overview')">📊 大盘总览</button>
+            <button class="v-tab-btn" onclick="switchView('members')">👥 成员精细分析</button>
+            <button class="v-tab-btn" onclick="switchView('episodes')">🎬 分集与资产透视</button>
+        </div>
+
+        <div id="view_overview" class="view-section active">
+            <div class="metric-grid">
+                <div class="metric-card"><div class="metric-value" id="m_total_cost">0</div><div class="metric-label">💎 累计总消耗积分</div></div>
+                <div class="metric-card"><div class="metric-value" style="color: #1677ff;" id="m_img_count">0</div><div class="metric-label">🖼️ 在线生图总频次</div></div>
+                <div class="metric-card"><div class="metric-value" style="color: #faad14;" id="m_text_count">0</div><div class="metric-label">🤖 AI 思考排版频次</div></div>
+                <div class="metric-card"><div class="metric-value" style="color: #722ed1;" id="m_team_size">0</div><div class="metric-label">👥 团队成员总数</div></div>
+            </div>
+            <div class="chart-row">
+                <div class="chart-card">
+                    <div class="chart-title">📈 资源消耗趋势图 (按日监控燃耗)</div>
+                    <div class="chart-container"><canvas id="trendChart"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">📊 全员消耗贡献对比排行</div>
+                    <div class="chart-container"><canvas id="overviewBarChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view_members" class="view-section">
+            <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 15px;">
+                <span style="font-weight: bold; color: #1d2129;">选择要体检的成员：</span>
+                <select class="member-select" id="memberSelect" onchange="renderMemberData()"></select>
+            </div>
+            
+            <div class="metric-grid" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="metric-card"><div class="metric-value" style="color: #f53f3f;" id="u_cost">0</div><div class="metric-label">💎 该成员总计烧掉积分</div></div>
+                <div class="metric-card"><div class="metric-value" style="color: #1677ff;" id="u_img">0</div><div class="metric-label">🖼️ 发起在线生图任务数</div></div>
+                <div class="metric-card"><div class="metric-value" style="color: #52c41a;" id="u_text">0</div><div class="metric-label">🤖 发起 AI 文本任务数</div></div>
+            </div>
+
+            <div class="data-table-wrap">
+                <div class="data-table-header">💳 该成员详细动作流水账单</div>
+                <div style="max-height: 400px; overflow-y: auto;">
+                    <table class="data-table">
+                        <thead><tr><th>时间戳</th><th>执行动作</th><th>状态</th><th>扣减积分</th></tr></thead>
+                        <tbody id="memberLogBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="view_episodes" class="view-section">
+            <div style="background: #e8f3ff; color: #1677ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; font-weight: bold; border: 1px solid #bcdcff;">
+                💡 交叉分析揭秘：<br>
+                1. <b>在线生图流水</b>：代表团队通过消耗积分向大模型发起的生图请求次数。<br>
+                2. <b>当前留底张数</b>：代表剧本中实际保存下来的图片张数。<br>
+                <i>如果留底张数 > 生图次数，说明团队大量使用了【本地上传】；如果生图次数 > 留底张数，说明有大量图片被废弃重抽。</i>
+            </div>
+
+            <div class="chart-row">
+                <div class="data-table-wrap" style="margin-bottom: 0;">
+                    <div class="data-table-header">🎬 各分集镜号与贴图产出检验</div>
+                    <div style="max-height: 500px; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead><tr><th>分集名称</th><th>包含分镜数</th><th>镜内已留底图片</th></tr></thead>
+                            <tbody id="epTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="data-table-wrap" style="margin-bottom: 0;">
+                    <div class="data-table-header">🎨 统一视觉资产提炼清单</div>
+                    <div style="max-height: 500px; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead><tr><th>大类</th><th>资产名称</th><th>主图状态</th><th>参考图数</th></tr></thead>
+                            <tbody id="assetTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="../js/app.js?v=9999"></script>
+    <script>
+        let allLogs = [];
+        let allProjects = [];
+        let currentProjectId = 'all';
+        let currentView = 'overview';
+        
+        let trendChartObj = null;
+        let overviewBarChartObj = null;
+
+        const ACTION_MAP = {
+            'gen_image': '生图 (出图)',
+            'extract_elements': '剧本拆解 (大模型)',
+            'ai_thought': 'AI 构思提示词',
+            'split_script': '智能分镜拆分'
+        };
+
+        window.onload = async () => {
+            if (!window.cloudSupabase) return alert("❌ 数据库连接异常，请检查 app.js");
+
+            try {
+                const { data: { user } } = await window.cloudSupabase.auth.getUser();
+                if (!user) return window.location.href = '../index.html';
+
+                // 🌟 核心修复点：使用 RPC 获取项目，它会顺带把项目的真实成员（project_members）一起连表查询出来！
+                const { data: projs, error: pErr } = await window.cloudSupabase.rpc('get_my_projects', { my_email: user.email });
+                
+                if (pErr) {
+                    // 兜底方案：如果 RPC 失败，手动联合查询项目表和成员表
+                    const { data: rawProjs } = await window.cloudSupabase.from('shared_projects').select('*');
+                    const { data: rawMembers } = await window.cloudSupabase.from('project_members').select('*');
+                    allProjects = (rawProjs || []).map(p => ({
+                        ...p,
+                        members: (rawMembers || []).filter(m => m.project_id === p.id).map(m => ({ email: m.user_email }))
+                    }));
+                } else {
+                    allProjects = projs || [];
+                }
+
+                // 2. 获取流水日志
+                const { data: statsData, error: statsErr } = await window.cloudSupabase.rpc('get_admin_resource_stats', { target_email: user.email });
+                if (statsErr) {
+                    const { data: directData } = await window.cloudSupabase.from('credit_logs').select('*').order('created_at', { ascending: false });
+                    allLogs = directData || [];
+                } else {
+                    allLogs = statsData ? (statsData.usage_list || (Array.isArray(statsData) ? statsData : [])) : [];
+                }
+
+                allLogs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+                renderProjectTabs();
+                switchProject('all');
+
+            } catch (e) {
+                alert("加载数据失败：" + e.message);
+            }
+        };
+
+        function switchView(viewName) {
+            currentView = viewName;
+            document.querySelectorAll('.v-tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
+            document.getElementById('view_' + viewName).classList.add('active');
+            
+            switchProject(currentProjectId);
+        }
+
+        function renderProjectTabs() {
+            const tabsDiv = document.getElementById('projectTabs');
+            let html = `<button class="p-tab-btn active" id="ptab_all" onclick="switchProject('all')">全盘总览</button>`;
+            allProjects.forEach(p => { html += `<button class="p-tab-btn" id="ptab_${p.id}" onclick="switchProject('${p.id}')">${p.name}</button>`; });
+            tabsDiv.innerHTML = html;
+        }
+
+        function switchProject(projectId) {
+            currentProjectId = projectId;
+            
+            document.querySelectorAll('.p-tab-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById('ptab_' + projectId);
+            if(activeBtn) activeBtn.classList.add('active');
+
+            const filteredLogs = projectId === 'all' ? allLogs : allLogs.filter(l => l.project_id === projectId);
+            const targetProj = projectId === 'all' ? null : allProjects.find(p => p.id === projectId);
+
+            if (currentView === 'overview') renderOverview(filteredLogs, projectId);
+            if (currentView === 'members') initMemberView(filteredLogs, projectId);
+            if (currentView === 'episodes') renderEpisodesAndAssets(targetProj, filteredLogs);
+        }
+
+        function renderOverview(logs, projectId) {
+            document.getElementById('m_total_cost').innerText = logs.reduce((sum, l) => sum + (l.credits_spent || 0), 0);
+            document.getElementById('m_img_count').innerText = logs.filter(l => l.action_type === 'gen_image').length;
+            document.getElementById('m_text_count').innerText = logs.filter(l => ['extract_elements', 'ai_thought', 'split_script'].includes(l.action_type)).length;
+
+            // 🌟 核心修复点：计算真实的团队规模，而不是流水活跃人数
+            let teamSize = 0;
+            let projectUsers = new Set();
+            if (projectId === 'all') {
+                allProjects.forEach(p => {
+                    if (p.members) p.members.forEach(m => projectUsers.add(m.email || m.user_email));
+                });
+            } else {
+                const proj = allProjects.find(p => p.id === projectId);
+                if (proj && proj.members) {
+                    proj.members.forEach(m => projectUsers.add(m.email || m.user_email));
+                }
+            }
+            teamSize = projectUsers.size;
+            // 兜底处理：至少有创建者1人
+            document.getElementById('m_team_size').innerText = Math.max(teamSize, 1);
+
+            const dateMap = {};
+            logs.forEach(l => {
+                const d = new Date(l.created_at).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+                dateMap[d] = (dateMap[d] || 0) + (l.credits_spent || 0);
+            });
+            const sortedDates = Object.keys(dateMap).sort((a,b) => new Date(a) - new Date(b));
+            
+            if(trendChartObj) trendChartObj.destroy();
+            trendChartObj = new Chart(document.getElementById('trendChart').getContext('2d'), {
+                type: 'line',
+                data: { labels: sortedDates.length ? sortedDates : ['无数据'], datasets: [{ label: '积分燃耗', data: sortedDates.map(d => dateMap[d]), borderColor: '#1677ff', backgroundColor: 'rgba(22, 119, 255, 0.1)', fill: true, tension: 0.4 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            const userMap = {};
+            logs.forEach(l => {
+                const uName = l.user_email ? l.user_email.split('@')[0] : '未知';
+                userMap[uName] = (userMap[uName] || 0) + (l.credits_spent || 0);
+            });
+            const sortedUsers = Object.keys(userMap).sort((a,b) => userMap[b] - userMap[a]);
+
+            if(overviewBarChartObj) overviewBarChartObj.destroy();
+            overviewBarChartObj = new Chart(document.getElementById('overviewBarChart').getContext('2d'), {
+                type: 'bar',
+                data: { labels: sortedUsers.length ? sortedUsers : ['无数据'], datasets: [{ label: '累计消耗积分', data: sortedUsers.map(u => userMap[u]), backgroundColor: '#722ed1', borderRadius: 6 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function initMemberView(logs, projectId) {
+            currentMemberLogs = logs;
+            
+            // 🌟 在成员下拉框中，显示该项目被邀请的所有成员（哪怕他还没产生消耗）
+            let projectUsers = new Set();
+            if (projectId === 'all') {
+                allProjects.forEach(p => { if (p.members) p.members.forEach(m => projectUsers.add(m.email || m.user_email)); });
+            } else {
+                const proj = allProjects.find(p => p.id === projectId);
+                if (proj && proj.members) proj.members.forEach(m => projectUsers.add(m.email || m.user_email));
+            }
+            
+            const usersArray = Array.from(projectUsers);
+            const sel = document.getElementById('memberSelect');
+            
+            if (usersArray.length === 0) {
+                sel.innerHTML = '<option value="">无成员数据</option>';
+                renderMemberData();
+                return;
+            }
+
+            const currentVal = sel.value;
+            sel.innerHTML = usersArray.map(u => `<option value="${u}">${u}</option>`).join('');
+            if (usersArray.includes(currentVal)) sel.value = currentVal;
+            
+            renderMemberData();
+        }
+
+        function renderMemberData() {
+            const email = document.getElementById('memberSelect').value;
+            const tbody = document.getElementById('memberLogBody');
+            
+            if (!email) {
+                document.getElementById('u_cost').innerText = 0; document.getElementById('u_img').innerText = 0; document.getElementById('u_text').innerText = 0;
+                tbody.innerHTML = '<tr><td colspan=\"4\" style=\"text-align:center; padding:20px;\">无数据</td></tr>';
+                return;
+            }
+
+            const uLogs = currentMemberLogs.filter(l => l.user_email === email);
+            
+            document.getElementById('u_cost').innerText = uLogs.reduce((sum, l) => sum + (l.credits_spent || 0), 0);
+            document.getElementById('u_img').innerText = uLogs.filter(l => l.action_type === 'gen_image').length;
+            document.getElementById('u_text').innerText = uLogs.filter(l => ['extract_elements', 'ai_thought', 'split_script'].includes(l.action_type)).length;
+
+            if(uLogs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan=\"4\" style=\"text-align:center; padding:20px; color:#86909c;\">该成员暂未在该项目产生消耗记录</td></tr>';
+            } else {
+                tbody.innerHTML = uLogs.map(l => {
+                    const badgeClass = l.action_type === 'gen_image' ? 'badge-img' : 'badge-txt';
+                    return `<tr>
+                        <td style=\"color:#86909c;\">${new Date(l.created_at).toLocaleString('zh-CN')}</td>
+                        <td style=\"font-weight:bold;\">${ACTION_MAP[l.action_type] || l.action_type}</td>
+                        <td><span class=\"badge ${badgeClass}\">成功</span></td>
+                        <td style=\"color:#f53f3f; font-weight:bold;\">-${l.credits_spent} 💎</td>
+                    </tr>`;
+                }).join('');
+            }
+        }
+
+        function renderEpisodesAndAssets(proj, logs) {
+            const epBody = document.getElementById('epTableBody');
+            const assetBody = document.getElementById('assetTableBody');
+
+            if (!proj) {
+                epBody.innerHTML = '<tr><td colspan=\"3\" style=\"text-align:center; padding: 40px; color:#86909c;\">⬅️ 请在顶部点击具体项目</td></tr>';
+                assetBody.innerHTML = '<tr><td colspan=\"4\" style=\"text-align:center; padding: 40px; color:#86909c;\">⬅️ 请在顶部点击具体项目</td></tr>';
+                return;
+            }
+
+            try {
+                let pData = typeof proj.data === 'string' ? JSON.parse(proj.data) : (proj.data || {});
+                let eps = pData.episodes || [];
+                
+                if (eps.length === 0) {
+                    epBody.innerHTML = '<tr><td colspan=\"3\" style=\"text-align:center; padding:20px;\">项目尚无剧本分集</td></tr>';
+                } else {
+                    epBody.innerHTML = eps.map(ep => {
+                        let sbCount = 0; let imgCount = 0;
+                        if (ep.data && ep.data.storyboardData) {
+                            sbCount = ep.data.storyboardData.length;
+                            ep.data.storyboardData.forEach(row => { if (row.images) imgCount += row.images.length; });
+                        }
+                        return `<tr>
+                            <td style=\"font-weight:bold; color:#1d2129;\">🎬 ${ep.name}</td>
+                            <td>${sbCount} 个镜号</td>
+                            <td style=\"color:#1677ff; font-weight:bold;\">${imgCount} 张</td>
+                        </tr>`;
+                    }).join('');
+                }
+            } catch(e) { epBody.innerHTML = '<tr><td colspan=\"3\">解析分集失败</td></tr>'; }
+
+            try {
+                let pAssets = typeof proj.assets === 'string' ? JSON.parse(proj.assets) : (proj.assets || {});
+                let flatAssets = [];
+
+                ['characters', 'scenes', 'props', 'effects'].forEach(cat => {
+                    if (pAssets[cat]) {
+                        pAssets[cat].forEach(item => {
+                            let typeName = cat === 'characters' ? '👤 角色' : (cat === 'scenes' ? '🏞️ 场景' : (cat === 'props' ? '🧸 道具' : '✨ 特效'));
+                            let hasMain = (cat === 'scenes') ? (item.forwardImg ? '✅ 已归档' : '❌ 空缺') : (item.img ? '✅ 已归档' : '❌ 空缺');
+                            
+                            flatAssets.push(`<tr>
+                                <td style=\"color:#86909c;\">${typeName}</td>
+                                <td style=\"font-weight:bold; color:#1d2129;\">${item.name || '未命名'}</td>
+                                <td style=\"color:${hasMain.includes('✅')?'#52c41a':'#f53f3f'}; font-weight:bold;\">${hasMain}</td>
+                                <td><span class=\"badge badge-img\">${(item.refImages || []).length} 张</span></td>
+                            </tr>`);
+                        });
+                    }
+                });
+
+                if (flatAssets.length === 0) assetBody.innerHTML = '<tr><td colspan=\"4\" style=\"text-align:center; padding: 20px;\">尚无视觉资产</td></tr>';
+                else assetBody.innerHTML = flatAssets.join('');
+            } catch(e) { assetBody.innerHTML = '<tr><td colspan=\"4\">解析资产失败</td></tr>'; }
+        }
+
+        function exportToExcel() {
+            const logsToExport = currentProjectId === 'all' ? allLogs : allLogs.filter(l => l.project_id === currentProjectId);
+            if (logsToExport.length === 0) return alert("当前视图没有可导出的数据！");
+            
+            const exportData = logsToExport.map(l => {
+                const proj = allProjects.find(p => p.id === l.project_id);
+                return {
+                    "时间": new Date(l.created_at).toLocaleString(),
+                    "项目": proj ? proj.name : l.project_id,
+                    "操作人": l.user_email,
+                    "动作": ACTION_MAP[l.action_type] || l.action_type,
+                    "消耗积分": l.credits_spent
+                };
+            });
+            
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "数据导出");
+            XLSX.writeFile(wb, `AI导演_透视报表_${Date.now()}.xlsx`);
+        }
+    </script>
+</body>
+</html>        .chart-container { flex: 1; min-height: 280px; position: relative; }
 
         .data-table-wrap { background: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #e5e6eb; overflow: hidden; margin-bottom: 25px; }
         .data-table-header { padding: 15px 20px; background: #fafafa; border-bottom: 1px solid #e5e6eb; font-weight: bold; color: #1d2129; display: flex; justify-content: space-between;}
