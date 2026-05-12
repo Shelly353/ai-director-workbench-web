@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 导演工作站 - 步骤1：视觉设定</title>
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -190,6 +189,29 @@
             document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
             localStorage.setItem('userCredits', newCredits);
             return true;
+        }
+
+        // 🌟 防丢数据版：物料生产追踪引擎
+        async function logProduction(assetName, mediaType, sourceType, cost) {
+            try {
+                let pid = 'unknown_project';
+                try {
+                    const ctx = await DB.get('active_context');
+                    if (ctx && ctx.projectId) pid = ctx.projectId;
+                } catch(err) {}
+
+                const { data: { user } } = await window.cloudSupabase.auth.getUser();
+                
+                await window.cloudSupabase.from('asset_production_logs').insert([{
+                    project_id: pid,
+                    user_email: user.email,
+                    asset_name: assetName,
+                    media_type: mediaType,
+                    source_type: sourceType,
+                    credits_spent: cost || 0
+                }]);
+                log(`✅ 已自动上报物料生产流水: [${mediaType}] ${assetName}`);
+            } catch(e) { console.warn("追踪日志记录失败", e); }
         }
 
         function logout() { localStorage.clear(); if (window.cloudSupabase) window.cloudSupabase.auth.signOut(); location.href = 'index.html'; }
@@ -387,6 +409,8 @@
             const selectedModel = document.getElementById('llmModelSelect').value || "deepseek-chat";
 
             if (!(await checkAndDeductCredits('extract_elements', selectedModel))) return;
+            // 🌟 埋点
+            logProduction("剧本视觉元素拆解", "文本", "AI生成", 1);
 
             btn.disabled = true;
             const originalText = btn.innerText;
@@ -456,7 +480,7 @@
                     </div>
 
                     <div class="prompt-dialog" id="promptDialog_${divId}">
-                        ${!(category === 'scenes' && type === 'reverse') ? `<button class="btn btn-outline" style="width:100%; font-size:11px; margin-bottom:8px; border-style:dashed; color:var(--primary);" onclick="writePromptWithLLM('${category}', ${index}, '${type}')">🤖 AI 自动生成提示词</button>` : ''}
+                        <button class="btn btn-outline" style="width:100%; font-size:11px; margin-bottom:8px; border-style:dashed; color:var(--primary);" onclick="writePromptWithLLM('${category}', ${index}, '${type}')">🤖 AI 自动生成提示词</button>
                         
                         <div id="desc_${divId}" class="rich-input" contenteditable="true" data-placeholder="描述... 输入 @ 引用下方参考图" 
                              oninput="updateDataDesc('${category}', ${index}, '${type}', this.innerHTML); handleRichInput(event, '${category}', ${index});">${currentDesc||''}</div>
@@ -483,6 +507,9 @@
 
                 if (!name || name.trim() === '') return alert("请先填写资产名称！");
                 if (!(await checkAndDeductCredits('ai_thought', currentLLM))) return;
+
+                // 🌟 埋点
+                logProduction(`提取: ${name}`, "文本", "AI生成", 1);
 
                 inputEl.innerText = "🤖 思考中..."; 
                 let endpoint = currentLLM.startsWith('gemini') ? '/api/gemini/chat' : '/api/deepseek/chat';
@@ -635,6 +662,8 @@
                 if (cat === 'scenes') { type === 'forward' ? extractedData.scenes[idx].forwardImg = b64 : extractedData.scenes[idx].reverseImg = b64; } 
                 else extractedData[cat][idx].img = b64;
                 renderAssetsUI(); 
+                // 🌟 埋点
+                logProduction(extractedData[cat][idx].name, "图片", "本地上传", 0);
             });
         }
 
@@ -648,6 +677,8 @@
                     const {cat, idx} = currentUploadTarget;
                     if(!extractedData[cat][idx].refImages) extractedData[cat][idx].refImages = [];
                     extractedData[cat][idx].refImages.push(cloudUrl);
+                    // 🌟 埋点
+                    logProduction(`[参考图] ${extractedData[cat][idx].name}`, "图片", "本地上传", 0);
                 }
             }
             renderAssetsUI(); this.value = ""; 
@@ -655,9 +686,6 @@
 
         function removeRefImg(e, cat, idx, imgIdx) { e.stopPropagation(); extractedData[cat][idx].refImages.splice(imgIdx, 1); saveCurrentState(); renderAssetsUI(); }
 
-        // ==========================================
-        // 🌟 终极修复：使用原版、不带 Auth Headers 的裸请求轮询
-        // ==========================================
         async function genAssetImage(cat, idx, type) {
             const styleKey = document.getElementById('styleSelect').value;
             const selectedModel = document.getElementById('imageModelSelect').value;
@@ -686,6 +714,10 @@
             const fullPrompt = `${stylePrefix}${template.prefix || ""}${rawText}${template.suffix || ""}`;
             
             if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
+
+            // 🌟 埋点
+            const costEst = selectedModel.includes('doubao') ? 1 : 2;
+            logProduction(extractedData[cat][idx].name || '主图', "图片", "AI生成", costEst);
 
             log(`📝 提交生图指令: ${fullPrompt}`);
             if (imgBox) imgBox.innerHTML = `<span>🎨 正在生图...</span>`;
@@ -723,11 +755,8 @@
                     
                     while (true) {
                         await new Promise(resolve => setTimeout(resolve, 3500));
-                        
-                        // 🌟 纯净裸请求：不带任何引发跨域的自定义 Header
                         const renderBaseURL = "https://proxy-server-web.onrender.com"; 
                         const pollRes = await fetch(`${renderBaseURL}/api/dashscope/poll/${res.taskId}`);
-                        
                         if (!pollRes.ok) throw new Error(`轮询被拒绝 HTTP ${pollRes.status}`);
 
                         const pollData = await pollRes.json();
@@ -735,27 +764,19 @@
                         
                         if (taskStatus === 'SUCCEEDED') {
                             const out = pollData.output || {};
-                            
-                            if (out.results && out.results.length > 0) {
-                                b64 = out.results[0].url || out.results[0].image_url;
-                            } else if (out.choices && out.choices[0]?.message?.content) {
+                            if (out.results && out.results.length > 0) b64 = out.results[0].url || out.results[0].image_url;
+                            else if (out.choices && out.choices[0]?.message?.content) {
                                 const content = out.choices[0].message.content;
                                 const imgItem = Array.isArray(content) ? content.find(c => c.image || c.url) : null;
                                 if (imgItem) b64 = imgItem.image || imgItem.url;
                                 else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
-                            } else if (out.image_url) {
-                                b64 = out.image_url;
-                            } else if (out.image) {
-                                b64 = out.image;
-                            }
+                            } else if (out.image_url) b64 = out.image_url;
+                            else if (out.image) b64 = out.image;
                             
                             if (!b64) throw new Error("提取图片链接失败");
-                            log(`✅ 阿里云生图完成！`);
                             break;
                         } else if (taskStatus === 'FAILED') {
                             throw new Error(`生成失败: ${pollData.output?.message || pollData.message}`);
-                        } else {
-                            log(`⏳ 云端排队绘制中: ${taskStatus}...`);
                         }
                     }
                 } else if (res.data && res.data.length > 0) {
@@ -770,7 +791,6 @@
                         const blob = await imgRes.blob();
                         b64 = await new Promise(r => { const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob); });
                     } catch (corsErr) {
-                        log(`⚠️ 触发跨域保护，正通过代理下载...`);
                         const proxyRes = await apiRequest('/api/proxy-image', { url: b64 });
                         if (proxyRes.base64) b64 = proxyRes.base64;
                         else throw new Error("后端代理下载图片失败");
@@ -788,11 +808,8 @@
                 
                 renderAssetsUI(); 
                 saveCurrentState();
-                log(`✅ [${extractedData[cat][idx].name}] 图片生成及保存成功！`);
-
             } catch (e) { 
                 if (imgBox) imgBox.innerHTML = `<span style="color:red; font-size:11px;">失败: ${e.message}</span>`; 
-                log(`❌ 生图异常: ${e.message}`); 
             }
         }
 
