@@ -474,17 +474,45 @@
 
         function downloadImage() { if(!generatedB64) return; const a = document.createElement('a'); a.href = generatedB64; a.download = `AI_Gen_${Date.now()}.png`; a.click(); }
 
-        async function confirmAndReturn() {
+      async function confirmAndReturn() {
             if(!generatedB64) return;
+            
             try {
                 const ctx = await DB.get('active_context');
                 const { data: { user } } = await window.cloudSupabase.auth.getUser();
+                
                 if (!ctx || !ctx.projectId) throw new Error("无法识别当前项目归属！");
-                await window.cloudSupabase.from('private_keyframes').insert([{ project_id: ctx.projectId, user_email: user.email, img_url: generatedB64 }]);
-                log(`✅ 已安全保存至您的【私有关键帧库】，团队可见！`);
-            } catch (err) { console.error("保存私有关键帧失败:", err); log(`❌ 保存失败: ${err.message}`); }
 
-            if (window.parent && window.parent.addGeneratedImageToRow) { window.parent.addGeneratedImageToRow(rowId, generatedB64); } else { alert("✅ 已成功保存到云端资产库！"); }
+                // 🌟 核心升级：加上 .select() 照妖镜，强迫数据库返回结果
+                const { data, error } = await window.cloudSupabase.from('private_keyframes').insert([{ 
+                    project_id: ctx.projectId, 
+                    user_email: user.email, 
+                    img_url: generatedB64 
+                }]).select();
+                
+                if (error) throw error;
+                
+                // 如果没报错，但返回了 0 行数据，说明被静默拦截了
+                if (!data || data.length === 0) {
+                    alert("🚨 保存被静默拦截！请去 Supabase 后台检查 private_keyframes 表的 RLS 是否关闭！");
+                    return; // 拦截后停止执行，不再关闭窗口
+                }
+                
+                log(`✅ 已安全保存至您的【私有关键帧库】！`);
+                
+            } catch (err) {
+                console.error("保存私有关键帧失败:", err);
+                log(`❌ 保存失败: ${err.message}`);
+                alert(`保存失败：${err.message}\n(如果提示 relation does not exist，请去 Supabase 运行建表 SQL)`);
+                return; // 报错后停止执行
+            }
+
+            // 只有当云端真正存进去了，才把图片加到分镜并关闭窗口
+            if (window.parent && window.parent.addGeneratedImageToRow) { 
+                window.parent.addGeneratedImageToRow(rowId, generatedB64); 
+            } else { 
+                alert("✅ 已成功保存到云端资产库！"); 
+            }
         }
     </script>
 </body>
