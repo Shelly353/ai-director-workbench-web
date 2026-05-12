@@ -17,6 +17,7 @@
             background-color: #f4f7f9 !important;
             color: #1d2129;
             font-family: -apple-system, system-ui, sans-serif;
+            padding-bottom: 60px;
         }
 
         /* --- 2. 隔离版导航栏 --- */
@@ -50,7 +51,7 @@
         .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 25px; }
         .card-m { background: #fff; padding: 25px; border-radius: 12px; border: 1px solid #e5e6eb; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
         .m-val { font-size: 32px; font-weight: 800; margin-bottom: 5px; }
-        .m-lab { font-size: 12px; color: #86909c; font-weight: bold; text-transform: uppercase; }
+        .m-lab { font-size: 12px; color: #86909c; font-weight: bold; }
 
         /* --- 5. 图表区 --- */
         .chart-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; margin-bottom: 25px; }
@@ -99,9 +100,9 @@
         </div>
 
         <div class="view-nav">
-            <button class="tab-v active" id="v_overview" onclick="switchView('overview')">趋势与贡献</button>
-            <button class="tab-v" id="v_members" onclick="switchView('members')">成员工作流</button>
-            <button class="tab-v" id="v_episodes" onclick="switchView('episodes')">分集与资产生产</button>
+            <button class="tab-v active" id="v_overview" onclick="switchView('overview')">📈 趋势与贡献</button>
+            <button class="tab-v" id="v_members" onclick="switchView('members')">👥 成员工作流</button>
+            <button class="tab-v" id="v_episodes" onclick="switchView('episodes')">🎬 分集与资产生产</button>
         </div>
 
         <div id="sec_overview" class="section active">
@@ -113,11 +114,11 @@
             </div>
             <div class="chart-row">
                 <div class="card-chart">
-                    <div class="c-title">📈 消耗燃耗趋势图</div>
+                    <div class="c-title">燃耗趋势图 (按日)</div>
                     <div style="flex:1"><canvas id="trendChart"></canvas></div>
                 </div>
                 <div class="card-chart">
-                    <div class="c-title">📊 成员贡献度排行</div>
+                    <div class="c-title">成员贡献额排行</div>
                     <div style="flex:1"><canvas id="barChart"></canvas></div>
                 </div>
             </div>
@@ -125,11 +126,18 @@
 
         <div id="sec_members" class="section">
             <div class="member-ctrl">
-                <span>🔍 查看成员详情：</span>
+                <span>🔍 选择成员：</span>
                 <select id="memberSelect" onchange="renderMemberData()"></select>
             </div>
-            <div class="card-table" style="height: 600px;">
-                <div class="t-header">💳 该成员个人流水账单</div>
+            
+            <div class="grid-4" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="card-m" style="padding:15px;"><div class="m-val" id="u_cost" style="color:#f53f3f">0</div><div class="m-lab">该成员消耗积分</div></div>
+                <div class="card-m" style="padding:15px;"><div class="m-val" id="u_img" style="color:#1677ff">0</div><div class="m-lab">生图任务数</div></div>
+                <div class="card-m" style="padding:15px;"><div class="m-val" id="u_text" style="color:#52c41a">0</div><div class="m-lab">AI 拆解任务数</div></div>
+            </div>
+
+            <div class="card-table" style="height: 500px;">
+                <div class="t-header">💳 个人积分流水账单</div>
                 <div class="t-body">
                     <table class="table-core">
                         <thead><tr><th>操作时间</th><th>具体动作</th><th>消耗积分</th></tr></thead>
@@ -145,16 +153,16 @@
                     <div class="t-header">🎬 分集进度检验</div>
                     <div class="t-body">
                         <table class="table-core">
-                            <thead><tr><th>分集</th><th>分镜</th><th>存图</th></tr></thead>
+                            <thead><tr><th>分集名</th><th>镜号数</th><th>已贴图数</th></tr></thead>
                             <tbody id="epTableBody"></tbody>
                         </table>
                     </div>
                 </div>
                 <div class="card-table">
-                    <div class="t-header">🎨 核心资产状态</div>
+                    <div class="t-header">🎨 统一资产归档状态</div>
                     <div class="t-body">
                         <table class="table-core">
-                            <thead><tr><th>名称</th><th>类型</th><th>主图</th></tr></thead>
+                            <thead><tr><th>大类</th><th>资产名称</th><th>主图归档</th></tr></thead>
                             <tbody id="assetTableBody"></tbody>
                         </table>
                     </div>
@@ -178,26 +186,50 @@
         let allLogs = [], allProjects = [], currentProjectId = 'all', currentView = 'overview';
         let trendChartObj = null, barChartObj = null;
 
-        const ACTION_MAP = { 'gen_image': '在线生图', 'extract_elements': '剧本拆解', 'ai_thought': '提示词构思', 'split_script': '智能分镜' };
+        const ACTION_MAP = { 'gen_image': '🎨 在线生图', 'extract_elements': '🤖 剧本拆解', 'ai_thought': '💡 提示词构思', 'split_script': '🎬 分镜拆分' };
 
         window.onload = async () => {
-            if (!window.cloudSupabase) return alert("数据库未连接");
+            if (!window.cloudSupabase) { alert("❌ 数据库连接异常，请检查 app.js 引入路径"); return; }
+            
             try {
                 const { data: { user } } = await window.cloudSupabase.auth.getUser();
-                if (!user) return;
+                if (!user) { location.href = '../index.html'; return; }
 
-                // 1. 获取项目关系 (包含真实成员)
-                const { data: projs } = await window.cloudSupabase.rpc('get_my_projects', { my_email: user.email });
-                allProjects = projs || [];
+                // 🌟 数据抓取：双重防崩溃兜底设计
 
-                // 2. 获取计费流水
-                const { data: statsData } = await window.cloudSupabase.rpc('get_admin_resource_stats', { target_email: user.email });
-                allLogs = statsData ? (statsData.usage_list || statsData) : [];
+                // 第一步：抓项目及成员
+                const { data: projs, error: pErr } = await window.cloudSupabase.rpc('get_my_projects', { my_email: user.email });
+                if (pErr) {
+                    console.warn("项目RPC失败，使用兜底联合查询...");
+                    const { data: rawProjs } = await window.cloudSupabase.from('shared_projects').select('*');
+                    const { data: rawMembers } = await window.cloudSupabase.from('project_members').select('*');
+                    allProjects = (rawProjs || []).map(p => ({
+                        ...p, members: (rawMembers || []).filter(m => m.project_id === p.id).map(m => ({ email: m.user_email }))
+                    }));
+                } else {
+                    allProjects = projs || [];
+                }
+
+                // 第二步：抓取积分消费流水
+                const { data: statsData, error: statsErr } = await window.cloudSupabase.rpc('get_admin_resource_stats', { target_email: user.email });
+                if (statsErr) {
+                    console.warn("流水RPC失败，使用兜底表查询...");
+                    const { data: directData } = await window.cloudSupabase.from('credit_logs').select('*').order('created_at', { ascending: false });
+                    allLogs = directData || [];
+                } else {
+                    allLogs = statsData ? (statsData.usage_list || (Array.isArray(statsData) ? statsData : [])) : [];
+                }
+
                 allLogs.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
 
+                // 启动页面渲染
                 renderProjectTabs();
                 switchProject('all');
-            } catch(e) { console.error("初始化失败", e); }
+
+            } catch(e) { 
+                console.error("初始化崩溃", e); 
+                alert("加载数据失败：" + e.message); 
+            }
         };
 
         function switchView(v) {
@@ -227,86 +259,126 @@
             const proj = pid === 'all' ? null : allProjects.find(p => p.id === pid);
 
             if(currentView === 'overview') renderOverview(logs, pid);
-            if(currentView === 'members') renderMemberView(logs, pid);
+            if(currentView === 'members') initMemberView(logs, pid);
             if(currentView === 'episodes') renderEpView(proj, logs);
         }
 
         function renderOverview(logs, pid) {
-            document.getElementById('m_total_cost').innerText = logs.reduce((s,l) => s + l.credits_spent, 0);
+            // 大盘指标
+            document.getElementById('m_total_cost').innerText = logs.reduce((s,l) => s + (l.credits_spent||0), 0);
             document.getElementById('m_img_count').innerText = logs.filter(l => l.action_type==='gen_image').length;
             document.getElementById('m_text_count').innerText = logs.filter(l => l.action_type!=='gen_image').length;
             
+            // 精准团队规模计算
             let users = new Set();
             if(pid === 'all') allProjects.forEach(p => p.members?.forEach(m => users.add(m.email || m.user_email)));
             else allProjects.find(p => p.id === pid)?.members?.forEach(m => users.add(m.email || m.user_email));
             document.getElementById('m_team_size').innerText = Math.max(users.size, 1);
 
-            // 图表渲染
+            // 趋势图渲染
             const dateMap = {};
-            logs.forEach(l => { const d = new Date(l.created_at).toLocaleDateString(); dateMap[d] = (dateMap[d]||0) + l.credits_spent; });
+            logs.forEach(l => { const d = new Date(l.created_at).toLocaleDateString(); dateMap[d] = (dateMap[d]||0) + (l.credits_spent||0); });
             const sortedDates = Object.keys(dateMap).sort();
             
             if(trendChartObj) trendChartObj.destroy();
             trendChartObj = new Chart(document.getElementById('trendChart'), {
                 type: 'line',
-                data: { labels: sortedDates, datasets: [{ label: '积分消耗', data: sortedDates.map(d => dateMap[d]), borderColor: '#1677ff', fill: true, backgroundColor: 'rgba(22,119,255,0.05)', tension: 0.3 }] },
+                data: { labels: sortedDates, datasets: [{ label: '日积分消耗', data: sortedDates.map(d => dateMap[d]), borderColor: '#1677ff', tension: 0.3, fill: true, backgroundColor: 'rgba(22,119,255,0.05)' }] },
                 options: { responsive: true, maintainAspectRatio: false }
             });
 
+            // 排行榜渲染
             const userMap = {};
-            logs.forEach(l => { const n = l.user_email.split('@')[0]; userMap[n] = (userMap[n]||0) + l.credits_spent; });
-            const uNames = Object.keys(userMap).sort((a,b) => userMap[b]-userMap[a]);
+            logs.forEach(l => { const n = l.user_email.split('@')[0]; userMap[n] = (userMap[n]||0) + (l.credits_spent||0); });
+            const uNames = Object.keys(userMap).sort((a,b) => userMap[b] - userMap[a]);
 
             if(barChartObj) barChartObj.destroy();
-            barChartObj = new Chart(document.getElementById('overviewBarChart'), {
+            barChartObj = new Chart(document.getElementById('barChart'), {
                 type: 'bar',
-                data: { labels: uNames, datasets: [{ label: '消耗积分', data: uNames.map(n => userMap[n]), backgroundColor: '#722ed1', borderRadius: 4 }] },
+                data: { labels: uNames, datasets: [{ label: '贡献积分', data: uNames.map(n => userMap[n]), backgroundColor: '#722ed1', borderRadius: 4 }] },
                 options: { responsive: true, maintainAspectRatio: false }
             });
         }
 
-        function renderMemberView(logs, pid) {
+        let currentMemberLogs = [];
+        function initMemberView(logs, pid) {
+            currentMemberLogs = logs;
             const sel = document.getElementById('memberSelect');
-            const users = [...new Set(logs.map(l => l.user_email))];
+            
+            // 抓取该项目受邀的所有成员，不管有没有产生过流水
+            let projectUsers = new Set();
+            if (pid === 'all') {
+                allProjects.forEach(p => { if(p.members) p.members.forEach(m => projectUsers.add(m.email || m.user_email)); });
+            } else {
+                const proj = allProjects.find(p => p.id === pid);
+                if (proj && proj.members) proj.members.forEach(m => projectUsers.add(m.email || m.user_email));
+            }
+            
+            const usersArray = Array.from(projectUsers);
             const current = sel.value;
-            sel.innerHTML = users.map(u => `<option value="${u}">${u}</option>`).join('');
-            if(users.includes(current)) sel.value = current;
+            sel.innerHTML = usersArray.map(u => `<option value="${u}">${u}</option>`).join('');
+            if(usersArray.includes(current)) sel.value = current;
+            
             renderMemberData();
         }
 
         function renderMemberData() {
             const u = document.getElementById('memberSelect').value;
             const body = document.getElementById('memberLogBody');
-            const uLogs = allLogs.filter(l => l.user_email === u && (currentProjectId==='all' || l.project_id===currentProjectId));
-            body.innerHTML = uLogs.map(l => `<tr><td>${new Date(l.created_at).toLocaleString()}</td><td>${ACTION_MAP[l.action_type]||l.action_type}</td><td style="color:#f53f3f;font-weight:bold">-${l.credits_spent}</td></tr>`).join('');
+            
+            if(!u) {
+                document.getElementById('u_cost').innerText = 0; document.getElementById('u_img').innerText = 0; document.getElementById('u_text').innerText = 0;
+                body.innerHTML = '<tr><td colspan="3" style="text-align:center;">暂无成员数据</td></tr>';
+                return;
+            }
+
+            const uLogs = currentMemberLogs.filter(l => l.user_email === u);
+            
+            document.getElementById('u_cost').innerText = uLogs.reduce((s, l) => s + (l.credits_spent||0), 0);
+            document.getElementById('u_img').innerText = uLogs.filter(l => l.action_type === 'gen_image').length;
+            document.getElementById('u_text').innerText = uLogs.filter(l => l.action_type !== 'gen_image').length;
+
+            body.innerHTML = uLogs.length ? uLogs.map(l => `<tr><td>${new Date(l.created_at).toLocaleString()}</td><td style="font-weight:bold;">${ACTION_MAP[l.action_type]||l.action_type}</td><td style="color:#f53f3f;font-weight:bold">-${l.credits_spent}</td></tr>`).join('') : '<tr><td colspan="3" style="text-align:center;color:#86909c;">该成员尚未产生计费动作</td></tr>';
         }
 
         function renderEpView(proj, logs) {
             const eb = document.getElementById('epTableBody'), ab = document.getElementById('assetTableBody'), lb = document.getElementById('liveLogBody');
-            lb.innerHTML = logs.slice(0, 50).map(l => `<tr><td>${new Date(l.created_at).toLocaleTimeString()}</td><td>${l.user_email.split('@')[0]}</td><td>${ACTION_MAP[l.action_type]||l.action_type}</td></tr>`).join('');
 
-            if(!proj) { eb.innerHTML = ab.innerHTML = '<tr><td colspan="3" style="text-align:center">选择具体项目进行透视</td></tr>'; return; }
+            // 实时流
+            lb.innerHTML = logs.length ? logs.slice(0, 50).map(l => `<tr><td style="color:#86909c;">${new Date(l.created_at).toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'})}</td><td style="font-weight:bold;">${l.user_email.split('@')[0]}</td><td><span class="erp-badge erp-badge-img">${ACTION_MAP[l.action_type]||l.action_type}</span></td></tr>`).join('') : '<tr><td colspan="3" style="text-align:center;">无操作</td></tr>';
 
-            const pData = typeof proj.data === 'string' ? JSON.parse(proj.data) : (proj.data||{});
-            const eps = pData.episodes || [];
-            eb.innerHTML = eps.map(e => {
-                let imgC = 0; e.data?.storyboardData?.forEach(r => imgC += (r.images?.length || 0));
-                return `<tr><td>🎬 ${e.name}</td><td>${e.data?.storyboardData?.length || 0}</td><td style="color:#1677ff;font-weight:bold">${imgC}张</td></tr>`;
-            }).join('');
+            if(!proj) { eb.innerHTML = ab.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#86909c;">⬅️ 请选择具体的项目查看透视表</td></tr>'; return; }
 
-            const pAssets = typeof proj.assets === 'string' ? JSON.parse(proj.assets) : (proj.assets||{});
-            let flat = [];
-            ['characters','scenes','props'].forEach(c => {
-                pAssets[c]?.forEach(i => flat.push(`<tr><td>${i.name}</td><td><span class="erp-badge erp-badge-blue">${c}</span></td><td>${(i.img||i.forwardImg)?'✅':'❌'}</td></tr>`));
-            });
-            ab.innerHTML = flat.length ? flat.join('') : '<tr><td colspan="3">暂无资产记录</td></tr>';
+            // 解析分集
+            try {
+                const pData = typeof proj.data === 'string' ? JSON.parse(proj.data) : (proj.data||{});
+                const eps = pData.episodes || [];
+                eb.innerHTML = eps.length ? eps.map(e => {
+                    let imgC = 0; e.data?.storyboardData?.forEach(r => imgC += (r.images?.length || 0));
+                    return `<tr><td style="font-weight:bold; color:#1d2129;">🎬 ${e.name}</td><td>${e.data?.storyboardData?.length || 0}</td><td style="color:#1677ff;font-weight:bold">${imgC} 张</td></tr>`;
+                }).join('') : '<tr><td colspan="3" style="text-align:center;">暂无分集</td></tr>';
+            } catch(e) { eb.innerHTML = '<tr><td colspan="3">解析失败</td></tr>'; }
+
+            // 解析资产
+            try {
+                const pAssets = typeof proj.assets === 'string' ? JSON.parse(proj.assets) : (proj.assets||{});
+                let flat = [];
+                ['characters','scenes','props'].forEach(c => {
+                    pAssets[c]?.forEach(i => {
+                        let typeName = c === 'characters' ? '👤 角色' : (c === 'scenes' ? '🏞️ 场景' : '🧸 道具');
+                        flat.push(`<tr><td style="color:#86909c;">${typeName}</td><td style="font-weight:bold;">${i.name}</td><td>${(i.img||i.forwardImg)?'✅ 已存图':'❌ 空缺'}</td></tr>`);
+                    });
+                });
+                ab.innerHTML = flat.length ? flat.join('') : '<tr><td colspan="3" style="text-align:center;">暂无资产提取</td></tr>';
+            } catch(e) { ab.innerHTML = '<tr><td colspan="3">解析失败</td></tr>'; }
         }
 
         function exportToExcel() {
             const data = currentProjectId === 'all' ? allLogs : allLogs.filter(l => l.project_id === currentProjectId);
-            const ws = XLSX.utils.json_to_sheet(data.map(l => ({ "时间": new Date(l.created_at).toLocaleString(), "账号": l.user_email, "项目ID": l.project_id, "动作": ACTION_MAP[l.action_type]||l.action_type, "消耗": l.credits_spent })));
+            if(!data.length) return alert("当前无数据导出");
+            const ws = XLSX.utils.json_to_sheet(data.map(l => ({ "时间": new Date(l.created_at).toLocaleString(), "账号": l.user_email, "项目ID": l.project_id, "动作": ACTION_MAP[l.action_type]||l.action_type, "消耗积分": l.credits_spent })));
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "报表");
+            XLSX.utils.book_append_sheet(wb, ws, "ERP报表");
             XLSX.writeFile(wb, `AI导演_数据报表_${Date.now()}.xlsx`);
         }
     </script>
