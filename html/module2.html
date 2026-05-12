@@ -155,6 +155,30 @@
             return true;
         }
 
+        // 🌟 物料追踪埋点引擎
+        async function logProduction(assetName, mediaType, sourceType, cost, modelName) {
+            try {
+                let pid = 'unknown_project';
+                try {
+                    const ctx = await DB.get('active_context');
+                    if (ctx && ctx.projectId) pid = ctx.projectId;
+                } catch(err) {}
+
+                const { data: { user } } = await window.cloudSupabase.auth.getUser();
+                if (!user) return;
+                
+                await window.cloudSupabase.from('asset_production_logs').insert([{
+                    project_id: pid,
+                    user_email: user.email,
+                    asset_name: assetName,
+                    media_type: mediaType,
+                    source_type: sourceType,
+                    credits_spent: Number(cost) || 0,
+                    model_name: modelName || 'N/A'
+                }]);
+            } catch(e) { console.warn("追踪日志记录失败", e); }
+        }
+
         // 🌟 统一跳板引擎
         async function saveAndGoTo(url) {
             const btn = event.target;
@@ -206,7 +230,6 @@
             }
         }
 
-        // 🌟 强制读取最新鲜的协作大盘数据
         window.onload = async () => {
             const userId = localStorage.getItem('userId');
             if (!userId) { window.location.replace('index.html'); return; }
@@ -268,6 +291,9 @@
 
             if (!(await checkAndDeductCredits('split_script', selectedLlm))) return;
 
+            // 🌟 埋点
+            logProduction("AI智能分镜拆分", "文本", "AI生成", 1, selectedLlm);
+
             const defaultPrompt = "请仔细阅读以下剧本，将其拆分成多个连续的分镜画面。";
             const llmPromptTpl = (window.AI_PROMPTS && window.AI_PROMPTS[methodKey]) ? window.AI_PROMPTS[methodKey].llmPrompt : defaultPrompt;
 
@@ -319,7 +345,7 @@
                 
                 autoMatchImages();
                 renderStoryboardUI();
-                await saveCurrentState(); // 自动拆完立刻上云！
+                await saveCurrentState(); 
                 log("✅ 自动拆分完成，进度已同步。");
             } catch (e) {
                 if (e.message.includes('limit: 0') || e.message.includes('429') || e.message.includes('404') || e.message.includes('503') || e.message.includes('500')) {
@@ -421,11 +447,10 @@
             document.querySelectorAll('.rich-input').forEach(el => { el.addEventListener('input', handleRichInput); });
         }
 
-        // 🌟 完美修复的资产导入弹窗
         async function openGlobalImport(rowId) {
             currentImportRowId = rowId;
             document.getElementById('globalImportModal').style.display = 'flex';
-            loadLibraryTab('characters'); // 默认显示人物
+            loadLibraryTab('characters'); 
         }
 
         async function loadLibraryTab(tabType) {
@@ -510,6 +535,8 @@
                     if (ctx && ctx.projectId && user) await window.cloudSupabase.from('private_keyframes').insert([{ project_id: ctx.projectId, user_email: user.email, img_url: b64 }]);
                     const row = storyboardData.find(x => x.id == id);
                     if(row) { row.images.push(b64); renderStoryboardUI(); saveCurrentState(); }
+                    // 🌟 埋点
+                    logProduction(`分镜 ${id} 附加图`, "图片", "本地上传", 0, "本地文件");
                 } catch (err) { log(`❌ 上传失败: ${err.message}`); }
             });
         }   
