@@ -9,7 +9,6 @@
         .checkout-box { background: #fff; width: 420px; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.08); padding: 30px; box-sizing: border-box; }
         .title { text-align: center; font-size: 20px; font-weight: 800; color: #1d2129; margin-bottom: 25px; }
         
-        /* 套餐选择 */
         .pkg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
         .pkg-card { border: 2px solid #e5e6eb; border-radius: 10px; padding: 15px; text-align: center; cursor: pointer; transition: 0.2s; position: relative; }
         .pkg-card:hover { border-color: #bcdcff; background: #f8fbff; }
@@ -18,7 +17,6 @@
         .pkg-credits { font-size: 20px; font-weight: 800; color: #1d2129; margin-bottom: 5px; }
         .pkg-price { font-size: 14px; color: #86909c; }
 
-        /* 支付方式 */
         .pay-methods { display: flex; gap: 15px; margin-bottom: 25px; }
         .method-btn { flex: 1; padding: 12px; border: 1px solid #e5e6eb; border-radius: 8px; font-size: 14px; font-weight: bold; background: #fff; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; transition: 0.2s; }
         .method-btn.wechat { color: #00b42a; }
@@ -27,7 +25,6 @@
         .method-btn.wechat.active { border-color: #00b42a; background: #f6ffed; }
         .method-btn.alipay.active { border-color: #1677ff; background: #e8f3ff; }
 
-        /* 二维码区域 */
         .qr-section { text-align: center; padding: 20px; border: 1px dashed #dcdfe6; border-radius: 12px; background: #fafafa; display: none; }
         #qrcode { display: flex; justify-content: center; margin: 15px 0; }
         .qr-tip { font-size: 13px; color: #86909c; margin-bottom: 10px; }
@@ -47,20 +44,16 @@
             
             <div class="pkg-grid">
                 <div class="pkg-card active" onclick="selectPkg('pkg_1', 9.9)">
-                    <div class="pkg-credits">100 积分</div>
-                    <div class="pkg-price">￥9.9</div>
+                    <div class="pkg-credits">100 积分</div><div class="pkg-price">￥9.9</div>
                 </div>
                 <div class="pkg-card" onclick="selectPkg('pkg_2', 39.9)">
-                    <div class="pkg-credits">500 积分</div>
-                    <div class="pkg-price">￥39.9</div>
+                    <div class="pkg-credits">500 积分</div><div class="pkg-price">￥39.9</div>
                 </div>
                 <div class="pkg-card" onclick="selectPkg('pkg_3', 69.9)">
-                    <div class="pkg-credits">1000 积分</div>
-                    <div class="pkg-price">￥69.9</div>
+                    <div class="pkg-credits">1000 积分</div><div class="pkg-price">￥69.9</div>
                 </div>
                 <div class="pkg-card" onclick="selectPkg('pkg_4', 299.9)">
-                    <div class="pkg-credits">5000 积分</div>
-                    <div class="pkg-price">￥299.9</div>
+                    <div class="pkg-credits">5000 积分</div><div class="pkg-price">￥299.9</div>
                 </div>
             </div>
 
@@ -112,7 +105,10 @@
         }
 
         async function createOrder() {
-            const token = localStorage.getItem('userToken');
+            // 🛡️ 核心修复：清理本地 Token，防止因特殊字符引发 iOS Safari 崩溃！
+            const rawToken = localStorage.getItem('userToken') || '';
+            const token = rawToken.replace(/[^A-Za-z0-9\-._~+/=]/g, ""); 
+            
             if (!token) return alert("身份失效，请重新登录");
 
             document.getElementById('btnCreateOrder').disabled = true;
@@ -130,23 +126,18 @@
 
                 currentOrderId = data.orderId;
                 
-                // 隐藏按钮，展示二维码区域
                 document.getElementById('btnCreateOrder').style.display = 'none';
                 document.getElementById('qrSection').style.display = 'block';
                 document.getElementById('qrTip').innerText = currentMethod === 'wechat' ? '🟢 请使用微信扫一扫支付' : '🔵 请使用支付宝扫一扫支付';
 
-                // 生成真实的支付二维码
                 document.getElementById('qrcode').innerHTML = "";
                 new QRCode(document.getElementById('qrcode'), {
-                    text: data.qrCodeData, // 微信或支付宝返回的真实唤起链接
-                    width: 180,
-                    height: 180,
-                    colorDark : "#000000",
-                    colorLight : "#ffffff"
+                    text: data.qrCodeData, 
+                    width: 180, height: 180,
+                    colorDark : "#000000", colorLight : "#ffffff"
                 });
 
-                // 开启轮询，等待用户扫码付款
-                startPolling();
+                startPolling(token);
 
             } catch (e) {
                 alert(e.message);
@@ -155,8 +146,7 @@
             }
         }
 
-        function startPolling() {
-            const token = localStorage.getItem('userToken');
+        function startPolling(token) {
             pollTimer = setInterval(async () => {
                 try {
                     const res = await fetch(`${API_BASE}/api/pay/status/${currentOrderId}`, {
@@ -164,35 +154,33 @@
                     });
                     const data = await res.json();
                     
-                    // 如果后端发现订单状态变成了 success (Webhook已经处理完)
                     if (data.status === 'success') {
                         clearInterval(pollTimer);
-                        localStorage.setItem('userCredits', data.newCredits); // 更新本地缓存
+                        localStorage.setItem('userCredits', data.newCredits);
                         
-                        // 通知父窗口更新顶部的积分展示（如果是弹窗形式）
+                        // 通知背后的父窗口更新 UI 积分
                         if (window.opener && !window.opener.closed) {
                             const creditEl = window.opener.document.getElementById('headerCredit');
                             if(creditEl) creditEl.innerText = `💎 积分: ${data.newCredits}`;
                         }
 
-                        // 显示成功页面
                         document.getElementById('paymentFlow').style.display = 'none';
                         document.getElementById('successFlow').style.display = 'flex';
                     }
                 } catch (e) { console.error("轮询异常:", e); }
-            }, 3000); // 每 3 秒问一次后端
+            }, 3000); 
         }
 
-        // [测试后门]：为了现在能跑通，提供一个模拟触发回调的按钮
+        // 测试后门：点击按钮充当微信回调
         async function mockUserPaid() {
             if(!currentOrderId) return;
-            const token = localStorage.getItem('userToken');
+            const rawToken = localStorage.getItem('userToken') || '';
+            const token = rawToken.replace(/[^A-Za-z0-9\-._~+/=]/g, ""); 
             await fetch(`${API_BASE}/api/pay/mock-trigger-webhook`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ orderId: currentOrderId })
             });
-            // 触发后，后端的订单状态会变成 success，上面的轮询（startPolling）会自动检测到并跳转成功页。
         }
     </script>
 </body>
