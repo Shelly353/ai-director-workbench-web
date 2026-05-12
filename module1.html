@@ -430,7 +430,6 @@
             }
         }
 
-        // 🌟 完美找回的交互布局：仅保留“上传参考图”，内部调用本地上传逻辑
         function createAssetHTML(category, index, name, desc, type, label) {
             const divId = `asset_${category}_${index}_${type}`;
             const item = extractedData[category][index];
@@ -471,7 +470,6 @@
                 </div>`;
         }
 
-        // 🌟 核心：原汁原味恢复您旧版的 AI 描述生成逻辑
         async function writePromptWithLLM(cat, idx, type) {
             const divId = `asset_${cat}_${idx}_${type}`;
             const inputEl = document.getElementById(`desc_${divId}`);
@@ -485,11 +483,10 @@
                 if (!name || name.trim() === '') return alert("请先填写资产名称！");
                 if (!(await checkAndDeductCredits('ai_thought', currentLLM))) return;
 
-                inputEl.innerText = "🤖 思考中..."; // 这是您最喜欢的交互
+                inputEl.innerText = "🤖 思考中..."; 
                 let endpoint = currentLLM.startsWith('gemini') ? '/api/gemini/chat' : '/api/deepseek/chat';
                 const apiModelName = currentLLM;
 
-                // 🌟 使用旧版的稳定 Prompt 模板
                 let templateStr = window.AI_PROMPTS && window.AI_PROMPTS[cat] ? window.AI_PROMPTS[cat].llmPrompt : "为 {name} 写一段画面感强、细节丰富的提示词...";
                 const promptContent = templateStr.replace(/{name}/g, name).replace(/{script}/g, script).replace(/{style}/g, styleName);
 
@@ -518,7 +515,6 @@
                         extractedData.scenes[idx].reverseDesc = reverseText || forwardText;
                     }
 
-                    // 同步尝试更新对应的反打面板（如果它开着的话）
                     if (type === 'forward' && south) {
                         const revEl = document.getElementById(`desc_asset_scenes_${idx}_reverse`);
                         if (revEl) revEl.innerText = reverseText;
@@ -528,7 +524,7 @@
                     inputEl.innerText = desc;
                     extractedData[cat][idx].description = desc;
                 }
-                saveCurrentState(); // 立即落库防丢失
+                saveCurrentState();
                 log(`✅ [${name}] AI 构思成功`);
             } catch (e) {
                 inputEl.innerText = "";
@@ -544,7 +540,6 @@
             }
         }
 
-        // 🌟 完全修好的 @ 引用响应逻辑
         function handleRichInput(e, cat, idx) {
             const sel = window.getSelection();
             if(sel.rangeCount === 0) return;
@@ -553,7 +548,7 @@
             
             if (text.endsWith('@')) {
                 const item = extractedData[cat][idx];
-                if (!item || !item.refImages || item.refImages.length === 0) return; // 没图就不弹
+                if (!item || !item.refImages || item.refImages.length === 0) return; 
                 
                 savedRange = range.cloneRange();
                 const rect = range.getBoundingClientRect();
@@ -642,7 +637,6 @@
             });
         }
 
-        // 🌟 “本地上传参考图”绑定直接呼出文件管理器
         function triggerMultiUpload(cat, idx) { currentUploadTarget = { cat, idx }; document.getElementById('multiUploader').click(); }
         document.getElementById('multiUploader').onchange = async function(e) {
             const files = Array.from(e.target.files);
@@ -660,7 +654,10 @@
 
         function removeRefImg(e, cat, idx, imgIdx) { e.stopPropagation(); extractedData[cat][idx].refImages.splice(imgIdx, 1); saveCurrentState(); renderAssetsUI(); }
 
-       async function genAssetImage(cat, idx, type) {
+        // ==========================================
+        // 🌟 终极修复：携带 Token 进行 Wan2.7 的任务轮询
+        // ==========================================
+        async function genAssetImage(cat, idx, type) {
             const styleKey = document.getElementById('styleSelect').value;
             const selectedModel = document.getElementById('imageModelSelect').value;
             const inputEl = document.getElementById(`desc_asset_${cat}_${idx}_${type}`);
@@ -685,48 +682,68 @@
             const fullPrompt = `${stylePrefix}${sysInject}${rawText}`;
 
             if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
-            if (imgBox) imgBox.innerHTML = `<span>🎨 正在生图...</span>`;
+            if (imgBox) imgBox.innerHTML = `<span>🎨 正在提交生图任务...</span>`;
 
             try {
+                // 🌟 获取实时 Token 护盾
+                let validToken = localStorage.getItem('userToken') || "";
+                if (window.cloudSupabase) {
+                    const { data: { session } } = await window.cloudSupabase.auth.getSession();
+                    if (session) validToken = session.access_token;
+                }
+
                 const res = await apiRequest('/api/image/create', { model: selectedModel, prompt: fullPrompt, images: inlineImgs, ratio: '16:9', size: "1920*1080", async_mode: true });
                 let b64 = "";
                 
                 if (res.taskId) {
+                    if (imgBox) imgBox.innerHTML = `<span>⏳ 生图排队中 (ID:${res.taskId.substring(0,4)}...)</span>`;
+                    
                     while (true) {
                         await new Promise(r => setTimeout(r, 3500));
                         
-                        // 🌟 核心修复点：携带 Token
+                        // 🌟 携带 Token 向代理服务器发起轮询 GET 请求
                         let currentUrl = typeof API_BASE !== 'undefined' ? API_BASE : "https://proxy-server-web.onrender.com"; 
-                        const userToken = localStorage.getItem('userToken');
 
                         const pollRes = await fetch(`${currentUrl}/api/dashscope/poll/${res.taskId}`, {
                             method: 'GET',
-                            headers: { 'Authorization': `Bearer ${userToken}` } 
+                            headers: { 
+                                'Authorization': `Bearer ${validToken}`,
+                                'Content-Type': 'application/json'
+                            } 
                         });
                         
-                        if (!pollRes.ok) throw new Error(`轮询被拒绝: HTTP ${pollRes.status}`);
+                        if (!pollRes.ok) throw new Error(`轮询被服务器拒绝 (HTTP ${pollRes.status})`);
 
                         const pollData = await pollRes.json();
                         const taskStatus = pollData.output?.task_status || pollData.task_status;
-                        if (taskStatus === 'SUCCEEDED') { b64 = pollData.output.results[0].url; break; }
-                        else if (taskStatus === 'FAILED') throw new Error("大模型生成失败");
+                        
+                        if (taskStatus === 'SUCCEEDED') { 
+                            b64 = pollData.output.results[0].url; 
+                            break; 
+                        } else if (taskStatus === 'FAILED') {
+                            throw new Error(pollData.output?.message || "大模型生成任务失败");
+                        }
                     }
                 } else if (res.data && res.data.length > 0) {
                     b64 = res.data[0].url;
                 }
 
-                if(!b64) throw new Error("未获取到图片链接");
+                if(!b64) throw new Error("未从服务器获取到图片链接");
 
+                if (imgBox) imgBox.innerHTML = `<span>☁️ 正在保存至云端...</span>`;
                 b64 = await window.uploadMediaToCloud(b64, 'png');
+                
                 if (cat === 'scenes') { type === 'forward' ? extractedData.scenes[idx].forwardImg = b64 : extractedData.scenes[idx].reverseImg = b64; } 
                 else extractedData[cat][idx].img = b64;
                 
                 renderAssetsUI(); saveCurrentState();
             } catch (e) { 
-                log(`❌ 生图报错: ${e.message}`);
+                console.error("生图报错:", e);
+                log(`❌ 生图失败: ${e.message}`);
                 if (imgBox) imgBox.innerHTML = `<span style="color:red">失败: ${e.message}</span>`; 
             }
         }
+
         function addAsset(cat) { if (cat === 'scenes') extractedData.scenes.push({ name: '新场景', description: '', forwardDesc: '', reverseDesc: '', forwardImg: null, reverseImg: null, refImages: [] }); else extractedData[cat].push({ name: '新项目', description: '', img: null, refImages: [] }); renderAssetsUI(); }
         function deleteAsset(cat, idx) { if (confirm(`确认删除？`)) { extractedData[cat].splice(idx, 1); renderAssetsUI(); } }
         function updateDataName(cat, idx, val) { extractedData[cat][idx].name = val; saveCurrentState(); }
