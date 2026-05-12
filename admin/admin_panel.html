@@ -2,18 +2,15 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 导演 - 剧组 ERP 数据指挥舱</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
     <style>
         html, body { overflow-y: auto !important; height: auto !important; min-height: 100vh; background-color: #f4f7f9 !important; color: #1d2129; font-family: -apple-system, system-ui, sans-serif; padding-bottom: 60px; margin: 0; padding: 0;}
-        
         .erp-header { background: #fff; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e6eb; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
         .container { max-width: 1400px; margin: 20px auto; padding: 0 20px; box-sizing: border-box; }
-
+        
         .toolbar { background: #fff; padding: 15px 20px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e5e6eb; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
         .date-filter { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: bold; color: #4e5969; }
         .date-filter input { padding: 8px 12px; border: 1px solid #c9cdd4; border-radius: 6px; outline: none; }
@@ -36,10 +33,10 @@
         .card-chart { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e5e6eb; min-height: 300px; display: flex; flex-direction: column; }
         .c-title { font-weight: 800; font-size: 15px; margin-bottom: 15px; color: #1d2129; }
 
-        .card-table { background: #fff; border-radius: 12px; border: 1px solid #e5e6eb; overflow: hidden; display: flex; flex-direction: column; height: 500px; }
-        .t-header { background: #fafafa; padding: 15px 20px; font-weight: bold; border-bottom: 1px solid #e5e6eb; font-size: 14px; }
+        .card-table { background: #fff; border-radius: 12px; border: 1px solid #e5e6eb; overflow: hidden; display: flex; flex-direction: column; height: 600px; }
+        .t-header { background: #fafafa; padding: 15px 20px; font-weight: bold; border-bottom: 1px solid #e5e6eb; font-size: 14px; display: flex; justify-content: space-between; align-items: center;}
         .table-core { width: 100%; border-collapse: collapse; }
-        .table-core th { position: sticky; top: 0; background: #fff; padding: 12px 15px; text-align: left; font-size: 12px; color: #86909c; border-bottom: 1px solid #f2f3f5; z-index: 10; }
+        .table-core th { position: sticky; top: 0; background: #fff; padding: 12px 15px; text-align: left; font-size: 13px; color: #86909c; border-bottom: 1px solid #f2f3f5; z-index: 10; }
         .table-core td { padding: 14px 15px; font-size: 13px; border-bottom: 1px solid #f2f3f5; }
         .table-core tr:hover { background: #f9fbfd; }
 
@@ -65,16 +62,17 @@
     </div>
 
     <div class="container">
+        
         <div class="toolbar">
             <div class="date-filter">
                 📅 日期范围：
                 <input type="date" id="startDate" onchange="applyFilters()"> - 
                 <input type="date" id="endDate" onchange="applyFilters()">
-                <button class="btn-exp" style="padding: 6px 12px;" onclick="applyFilters()">筛选</button>
+                <button class="btn-exp" style="padding: 6px 12px;" onclick="applyFilters()">应用筛选</button>
             </div>
             <div class="sync-status">
                 <span id="cacheStatusText">⏳ 正在连接...</span>
-                <button class="btn-sync" onclick="loadDataFromDB(true)">🔄 强制同步最新数据</button>
+                <button class="btn-sync" onclick="loadDataFromDB(true)">🔄 强行同步云端数据</button>
             </div>
         </div>
 
@@ -83,16 +81,16 @@
         </div>
 
         <div class="view-nav">
-            <button class="tab-v active" id="v_overview" onclick="switchView('overview')">📈 财务与趋势总览</button>
-            <button class="tab-v" id="v_members" onclick="switchView('members')">👥 成员物料全景</button>
-            <button class="tab-v" id="v_episodes" onclick="switchView('episodes')">🎬 剧集资产盘点</button>
+            <button class="tab-v active" id="v_overview" onclick="switchView('overview')">📈 大盘与财务趋势</button>
+            <button class="tab-v" id="v_materials" onclick="switchView('materials')">📦 全员物料流水明细</button>
+            <button class="tab-v" id="v_episodes" onclick="switchView('episodes')">🎬 分集与资产存量</button>
         </div>
 
         <div id="sec_overview" class="section active">
             <div class="grid-4">
-                <div class="card-m"><div class="m-val" id="m_total_cost">0</div><div class="m-lab">💎 区间总消耗积分</div></div>
-                <div class="card-m"><div class="m-val" id="m_img_count" style="color:#1677ff">0</div><div class="m-lab">🖼️ 生成图片总频次</div></div>
-                <div class="card-m"><div class="m-val" id="m_text_count" style="color:#faad14">0</div><div class="m-lab">🤖 生成文本总频次</div></div>
+                <div class="card-m"><div class="m-val" id="m_total_cost" style="color:#f53f3f">0</div><div class="m-lab">💎 区间总消耗积分</div></div>
+                <div class="card-m"><div class="m-val" id="m_ai_img" style="color:#1677ff">0</div><div class="m-lab">🖼️ AI 生图频次</div></div>
+                <div class="card-m"><div class="m-val" id="m_local_img" style="color:#52c41a">0</div><div class="m-lab">📁 本地上传频次</div></div>
                 <div class="card-m"><div class="m-val" id="m_team_size" style="color:#722ed1">0</div><div class="m-lab">👥 剧组总人数</div></div>
             </div>
             <div class="chart-row">
@@ -107,32 +105,31 @@
             </div>
         </div>
 
-        <div id="sec_members" class="section">
+        <div id="sec_materials" class="section">
             <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 15px;">
-                <span style="font-weight: bold; color: #1d2129;">🔍 选择成员：</span>
-                <select id="memberSelect" style="padding:10px 15px; border-radius:8px; border:1px solid #dcdfe6; outline:none; font-weight:bold; color:#1677ff;" onchange="renderMemberView()"></select>
+                <span style="font-weight: bold; color: #1d2129;">🔍 筛选成员：</span>
+                <select id="memberSelect" style="padding:10px 15px; border-radius:8px; border:1px solid #dcdfe6; outline:none; font-weight:bold; color:#1677ff;" onchange="renderMaterialTable()"></select>
             </div>
             
-            <div class="chart-row" style="grid-template-columns: 1fr 2fr;">
-                <div class="card-chart" style="min-height: 250px;">
-                    <div class="c-title">🍩 该成员物料产出类型</div>
-                    <div style="flex:1"><canvas id="memberPieChart"></canvas></div>
-                </div>
-                <div class="card-m" style="display:flex; justify-content:space-around; align-items:center;">
-                    <div><div class="m-val" id="u_cost" style="color:#f53f3f">0</div><div class="m-lab">个人累计耗资</div></div>
-                    <div><div class="m-val" id="u_img" style="color:#1677ff">0</div><div class="m-lab">生产图片数</div></div>
-                    <div><div class="m-val" id="u_txt" style="color:#52c41a">0</div><div class="m-lab">生产文本数</div></div>
-                </div>
-            </div>
-
             <div class="card-table">
-                <div class="t-header" style="display:flex; justify-content:space-between; align-items:center;">
-                    <span>📋 该成员物料生产明细库 <span style="font-size:12px; font-weight:normal; color:#86909c;">(已双重核对财务流水，绝不漏单)</span></span>
+                <div class="t-header">
+                    <span>📋 全息物料生产流水</span>
+                    <span style="font-weight:normal; font-size:12px; color:#86909c;">记录了所有人、每一次点击生成的具体内容和模型</span>
                 </div>
-                <div style="overflow-y: auto;">
+                <div style="overflow-y: auto; flex: 1;">
                     <table class="table-core">
-                        <thead><tr><th>时间</th><th>物料名称</th><th>类型</th><th>来源</th><th>消耗积分</th></tr></thead>
-                        <tbody id="memberProdBody"></tbody>
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>操作人</th>
+                                <th>物料内容</th>
+                                <th>类别</th>
+                                <th>生产来源</th>
+                                <th>使用模型</th>
+                                <th>扣除积分</th>
+                            </tr>
+                        </thead>
+                        <tbody id="materialBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -140,7 +137,7 @@
 
         <div id="sec_episodes" class="section">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                <div class="card-table" style="height: 600px;">
+                <div class="card-table">
                     <div class="t-header">🎬 剧本分集产出核验</div>
                     <div style="overflow-y: auto;">
                         <table class="table-core">
@@ -149,7 +146,7 @@
                         </table>
                     </div>
                 </div>
-                <div class="card-table" style="height: 600px;">
+                <div class="card-table">
                     <div class="t-header">🎨 统一视觉资产库清单</div>
                     <div style="overflow-y: auto;">
                         <table class="table-core">
@@ -165,17 +162,13 @@
 
     <script src="../js/app.js?v=9999"></script>
     <script>
-        let rawCreditLogs = [], rawProdLogs = [], rawProjects = [];
-        let fCreditLogs = [], fProdLogs = [];
-        let currentProjectId = 'all', currentView = 'overview';
+        let rawProdLogs = [];
+        let rawProjects = [];
+        let fProdLogs = [];
+        
+        let currentProjectId = 'all';
+        let currentView = 'overview';
         let charts = {}; 
-
-        const ACTION_MAP = { 
-            'gen_image': { name: '在线生图', type: '图片' }, 
-            'extract_elements': { name: '剧本整体拆解', type: '文本' }, 
-            'ai_thought': { name: 'AI 提示词构思', type: '文本' }, 
-            'split_script': { name: '智能分镜划场', type: '文本' } 
-        };
 
         window.onload = async () => {
             if (!window.cloudSupabase) return alert("❌ 数据库连接异常");
@@ -184,15 +177,13 @@
 
         async function loadDataFromCacheOrDB() {
             const today = new Date().toLocaleDateString('zh-CN');
-            const cacheStr = localStorage.getItem('erp_data_cache_v3');
+            const cacheStr = localStorage.getItem('erp_data_cache_v4'); // 升级缓存名
             
             if (cacheStr) {
                 const cache = JSON.parse(cacheStr);
                 if (cache.date === today) {
-                    rawCreditLogs = Array.isArray(cache.creditLogs) ? cache.creditLogs : [];
                     rawProdLogs = Array.isArray(cache.prodLogs) ? cache.prodLogs : [];
                     rawProjects = Array.isArray(cache.projects) ? cache.projects : [];
-                    
                     document.getElementById('cacheStatusText').innerHTML = `✅ 已加载今日快照数据 (时间: ${cache.time})`;
                     initUI();
                     return;
@@ -207,15 +198,12 @@
                 const { data: { user } } = await window.cloudSupabase.auth.getUser();
                 if (!user) return location.href = '../index.html';
 
-                // 🌟 1. 修复成员获取逻辑：并发提取项目表、成员表、计费表、物料表
-                const [projRes, creditRes, prodRes, memberRes] = await Promise.all([
+                const [projRes, prodRes, memberRes] = await Promise.all([
                     window.cloudSupabase.rpc('get_my_projects', { my_email: user.email }),
-                    window.cloudSupabase.rpc('get_admin_resource_stats', { target_email: user.email }),
-                    window.cloudSupabase.from('asset_production_logs').select('*'),
+                    window.cloudSupabase.from('asset_production_logs').select('*').order('created_at', { ascending: false }),
                     window.cloudSupabase.from('project_members').select('*')
                 ]);
 
-                // 如果 RPC 项目获取失败，走底层查表兜底
                 let baseProjs = projRes.data || [];
                 if (projRes.error) {
                     const { data: rawP } = await window.cloudSupabase.from('shared_projects').select('*');
@@ -223,34 +211,21 @@
                 }
                 const baseMembers = memberRes.data || [];
 
-                // 🌟 核心：精准拼装团队名单（包含未操作人员）
                 rawProjects = baseProjs.map(p => {
                     let mSet = new Set();
-                    if(p.owner_email) mSet.add(p.owner_email); // 创始人必定在内
+                    if(p.owner_email) mSet.add(p.owner_email); 
                     baseMembers.filter(m => m.project_id === p.id).forEach(m => mSet.add(m.user_email));
                     return { ...p, members: Array.from(mSet).map(email => ({ email })) };
                 });
 
-                // 财务流水处理
-                if (creditRes.error) {
-                    const { data: backup } = await window.cloudSupabase.from('credit_logs').select('*').order('created_at', { ascending: false });
-                    rawCreditLogs = Array.isArray(backup) ? backup : [];
-                } else {
-                    let cData = creditRes.data;
-                    if (typeof cData === 'string') { try { cData = JSON.parse(cData); } catch(e){} }
-                    rawCreditLogs = cData ? (cData.usage_list || cData) : [];
-                    if (!Array.isArray(rawCreditLogs)) rawCreditLogs = [];
-                }
-
-                // 物料流水处理
                 let pData = prodRes.data;
                 if (typeof pData === 'string') { try { pData = JSON.parse(pData); } catch(e){} }
                 rawProdLogs = Array.isArray(pData) ? pData : [];
 
                 const timeStr = new Date().toLocaleTimeString('zh-CN');
-                localStorage.setItem('erp_data_cache_v3', JSON.stringify({
+                localStorage.setItem('erp_data_cache_v4', JSON.stringify({
                     date: new Date().toLocaleDateString('zh-CN'), time: timeStr,
-                    creditLogs: rawCreditLogs, prodLogs: rawProdLogs, projects: rawProjects
+                    prodLogs: rawProdLogs, projects: rawProjects
                 }));
 
                 document.getElementById('cacheStatusText').innerHTML = `✅ 数据已与云端同步 (最新: ${timeStr})`;
@@ -275,23 +250,18 @@
             const startVal = document.getElementById('startDate').value;
             const endVal = document.getElementById('endDate').value;
             
-            let cl = Array.isArray(rawCreditLogs) ? rawCreditLogs : [];
             let pl = Array.isArray(rawProdLogs) ? rawProdLogs : [];
 
             if (startVal) {
                 const sTime = new Date(startVal).getTime();
-                cl = cl.filter(l => new Date(l.created_at).getTime() >= sTime);
                 pl = pl.filter(l => new Date(l.created_at).getTime() >= sTime);
             }
             if (endVal) {
                 const eTime = new Date(endVal).getTime() + 86400000; 
-                cl = cl.filter(l => new Date(l.created_at).getTime() <= eTime);
                 pl = pl.filter(l => new Date(l.created_at).getTime() <= eTime);
             }
 
-            fCreditLogs = cl;
             fProdLogs = pl;
-            
             switchProject(currentProjectId);
         }
 
@@ -306,34 +276,32 @@
             currentProjectId = pid;
             document.querySelectorAll('.tab-p').forEach(t => t.classList.toggle('active', (t.id === 'ptab_'+pid || (pid==='all' && t.id==='ptab_all'))));
             
-            const pCL = pid === 'all' ? fCreditLogs : fCreditLogs.filter(l => l.project_id === pid);
+            const pPL = pid === 'all' ? fProdLogs : fProdLogs.filter(l => l.project_id === pid);
             const proj = pid === 'all' ? null : rawProjects.find(p => p.id === pid);
 
-            if(currentView === 'overview') renderOverview(pCL, pid);
-            if(currentView === 'members') renderMemberInit(pCL, pid);
+            if(currentView === 'overview') renderOverview(pPL, pid);
+            if(currentView === 'materials') renderMaterialInit(pPL, pid);
             if(currentView === 'episodes') renderEpisodes(proj);
         }
 
-        function renderOverview(clogs, pid) {
-            // 财务指标
-            document.getElementById('m_total_cost').innerText = clogs.reduce((s, l) => s + (l.credits_spent||0), 0);
-            document.getElementById('m_img_count').innerText = clogs.filter(l => l.action_type === 'gen_image').length;
-            document.getElementById('m_text_count').innerText = clogs.filter(l => l.action_type !== 'gen_image').length;
+        function renderOverview(plogs, pid) {
+            document.getElementById('m_total_cost').innerText = plogs.reduce((s, l) => s + (l.credits_spent||0), 0);
+            document.getElementById('m_ai_img').innerText = plogs.filter(l => l.media_type === '图片' && l.source_type === 'AI生成').length;
+            document.getElementById('m_local_img').innerText = plogs.filter(l => l.media_type === '图片' && l.source_type === '本地上传').length;
 
-            // 🌟 核心修复 2：全团队精准统计 (不会只显示创建者了)
             let users = new Set();
             if(pid === 'all') {
                 rawProjects.forEach(p => p.members?.forEach(m => users.add(m.email)));
-                clogs.forEach(l => users.add(l.user_email)); // 包含被删成员的流水
+                plogs.forEach(l => users.add(l.user_email)); 
             } else {
                 rawProjects.find(p => p.id === pid)?.members?.forEach(m => users.add(m.email));
-                clogs.forEach(l => users.add(l.user_email));
+                plogs.forEach(l => users.add(l.user_email));
             }
             document.getElementById('m_team_size').innerText = Math.max(users.size, 1);
 
             // 趋势图
             const dateMap = {};
-            clogs.forEach(l => { const d = new Date(l.created_at).toLocaleDateString(); dateMap[d] = (dateMap[d]||0) + l.credits_spent; });
+            plogs.forEach(l => { const d = new Date(l.created_at).toLocaleDateString(); dateMap[d] = (dateMap[d]||0) + (l.credits_spent||0); });
             const sorted = Object.keys(dateMap).sort();
             
             if(charts.trend) charts.trend.destroy();
@@ -343,129 +311,64 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend:{display:false} } }
             });
 
-            // 人员条形图
+            // 人员排行
             const uMap = {};
-            clogs.forEach(l => { const n = l.user_email.split('@')[0]; uMap[n] = (uMap[n]||0) + l.credits_spent; });
+            plogs.forEach(l => { const n = l.user_email.split('@')[0]; uMap[n] = (uMap[n]||0) + (l.credits_spent||0); });
             const uNames = Object.keys(uMap).sort((a,b) => uMap[b] - uMap[a]);
 
             if(charts.bar) charts.bar.destroy();
             charts.bar = new Chart(document.getElementById('costBarChart'), {
                 type: 'bar',
-                data: { labels: uNames, datasets: [{ label: '消耗', data: uNames.map(n => uMap[n]), backgroundColor: '#722ed1', borderRadius: 4 }] },
+                data: { labels: uNames, datasets: [{ label: '耗资', data: uNames.map(n => uMap[n]), backgroundColor: '#722ed1', borderRadius: 4 }] },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend:{display:false} } }
             });
         }
 
-        function renderMemberInit(clogs, pid) {
+        let currentMaterialLogs = [];
+        function renderMaterialInit(plogs, pid) {
+            currentMaterialLogs = plogs;
             let users = new Set();
             if(pid === 'all') {
                 rawProjects.forEach(p => p.members?.forEach(m => users.add(m.email)));
-                clogs.forEach(l => users.add(l.user_email));
+                plogs.forEach(l => users.add(l.user_email));
             } else {
                 rawProjects.find(p => p.id === pid)?.members?.forEach(m => users.add(m.email));
-                clogs.forEach(l => users.add(l.user_email));
+                plogs.forEach(l => users.add(l.user_email));
             }
             
             const sel = document.getElementById('memberSelect');
             const arr = Array.from(users);
             const current = sel.value;
-            sel.innerHTML = arr.length ? arr.map(u => `<option value="${u}">${u}</option>`).join('') : '<option value="">无成员</option>';
-            if(arr.includes(current)) sel.value = current;
+            sel.innerHTML = `<option value="all">显示全部成员</option>` + arr.map(u => `<option value="${u}">${u}</option>`).join('');
+            if(arr.includes(current) || current === 'all') sel.value = current || 'all';
             
-            renderMemberView();
+            renderMaterialTable();
         }
 
-        // 🌟 核心引擎 3：财务表与物料表的「智能合并」
-        function getMergedUserLogs(uEmail) {
-            // 获取该用户在当前项目/日期范围内的 财务流水 和 物料流水
-            let uCL = fCreditLogs.filter(c => c.user_email === uEmail && (currentProjectId === 'all' || c.project_id === currentProjectId));
-            let uPL = fProdLogs.filter(p => p.user_email === uEmail && (currentProjectId === 'all' || p.project_id === currentProjectId));
-
-            let merged = [];
-            
-            // 遍历所有确实扣费的账单 (绝不会漏报任何一次文本/图片生成)
-            uCL.forEach(c => {
-                let cTime = new Date(c.created_at).getTime();
-                // 尝试找同一时间 (相差 20 秒内) 的对应物料名
-                let matchIdx = uPL.findIndex(p => p.source_type === 'AI生成' && Math.abs(new Date(p.created_at).getTime() - cTime) < 20000);
-                
-                let assetInfo = ACTION_MAP[c.action_type] || { name: c.action_type, type: '未知' };
-                
-                if (matchIdx !== -1) {
-                    // 如果找到了，带上他为哪个具体名字（如“孙悟空”）干的活
-                    let p = uPL[matchIdx];
-                    merged.push({
-                        time: c.created_at,
-                        name: `[${assetInfo.name}] ${p.asset_name}`,
-                        media: p.media_type,
-                        source: p.source_type,
-                        cost: c.credits_spent
-                    });
-                    uPL.splice(matchIdx, 1); // 核对过的踢掉
-                } else {
-                    // 如果没找到（没记上物料表），直接用账单托底，保证肯定会显示！
-                    merged.push({
-                        time: c.created_at,
-                        name: `${assetInfo.name} 任务`,
-                        media: assetInfo.type,
-                        source: 'AI生成',
-                        cost: c.credits_spent
-                    });
-                }
-            });
-
-            // 剩下的是没扣费的（比如本地免费上传）
-            uPL.forEach(p => {
-                merged.push({
-                    time: p.created_at,
-                    name: `[本地上传] ${p.asset_name}`,
-                    media: p.media_type,
-                    source: p.source_type,
-                    cost: 0
-                });
-            });
-
-            return merged.sort((a,b) => new Date(b.time) - new Date(a.time));
-        }
-
-        function renderMemberView() {
+        function renderMaterialTable() {
             const u = document.getElementById('memberSelect').value;
-            if(!u) return;
-
-            // 调用智能对账引擎
-            const finalLogs = getMergedUserLogs(u);
-
-            // 指标
-            document.getElementById('u_cost').innerText = finalLogs.reduce((s,l) => s + l.cost, 0);
-            document.getElementById('u_img').innerText = finalLogs.filter(l => l.media.includes('图')).length;
-            document.getElementById('u_txt').innerText = finalLogs.filter(l => l.media.includes('文本')).length;
-
-            // 饼图
-            const sMap = {};
-            finalLogs.forEach(l => {
-                const k = `${l.media} | ${l.source}`;
-                sMap[k] = (sMap[k] || 0) + 1;
-            });
+            const body = document.getElementById('materialBody');
             
-            if(charts.pie) charts.pie.destroy();
-            charts.pie = new Chart(document.getElementById('memberPieChart'), {
-                type: 'doughnut',
-                data: { labels: Object.keys(sMap), datasets: [{ data: Object.values(sMap), backgroundColor: ['#1677ff', '#52c41a', '#faad14', '#722ed1'] }] },
-                options: { responsive: true, maintainAspectRatio: false, cutout: '60%' }
-            });
+            const logs = u === 'all' ? currentMaterialLogs : currentMaterialLogs.filter(l => l.user_email === u);
 
-            // 表格明细
-            const body = document.getElementById('memberProdBody');
-            body.innerHTML = finalLogs.length ? finalLogs.map(l => {
-                const bSrc = l.source === 'AI生成' ? 'b-ai' : 'b-local';
+            if(logs.length === 0) {
+                body.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 40px; color:#86909c;">在此区间内无生产记录</td></tr>';
+                return;
+            }
+
+            body.innerHTML = logs.map(l => {
+                const bSrc = l.source_type === 'AI生成' ? 'b-ai' : 'b-local';
+                const costDisplay = l.credits_spent > 0 ? `<span style="color:#f53f3f; font-weight:bold;">-${l.credits_spent} 💎</span>` : `<span style="color:#86909c;">免费</span>`;
                 return `<tr>
-                    <td style="color:#86909c;">${new Date(l.time).toLocaleString('zh-CN',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
-                    <td style="font-weight:bold; color:#1d2129;">${l.name}</td>
-                    <td><span class="badge b-type">${l.media}</span></td>
-                    <td><span class="badge ${bSrc}">${l.source}</span></td>
-                    <td style="color:#f53f3f; font-weight:bold;">${l.cost > 0 ? '-'+l.cost+' 💎' : '免费'}</td>
+                    <td style="color:#86909c;">${new Date(l.created_at).toLocaleString('zh-CN', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+                    <td style="font-weight:bold;">${l.user_email.split('@')[0]}</td>
+                    <td style="font-weight:bold; color:#1d2129;">${l.asset_name}</td>
+                    <td><span class="badge b-type">${l.media_type}</span></td>
+                    <td><span class="badge ${bSrc}">${l.source_type}</span></td>
+                    <td style="color:#86909c; font-size:12px;">${l.model_name || 'N/A'}</td>
+                    <td>${costDisplay}</td>
                 </tr>`;
-            }).join('') : '<tr><td colspan="5" style="text-align:center;">此区间无记录</td></tr>';
+            }).join('');
         }
 
         function renderEpisodes(proj) {
@@ -499,19 +402,21 @@
             } catch(e) { ab.innerHTML = '<tr><td colspan="3">解析失败</td></tr>'; }
         }
 
-        // 导出当期视图数据
-        let currentExportData = [];
         function exportToExcel() {
-            if(!document.getElementById('memberSelect').value && currentView === 'members') return alert("请先选择成员");
-            
-            // 简单的导出直接去拿表格数据最直观
-            const table = document.querySelector('.section.active .table-core');
-            if(!table) return alert("当前视图无可导出表格");
-
-            const ws = XLSX.utils.table_to_sheet(table);
+            const dataToExport = currentViewProdLogs.map(l => ({
+                "生产时间": new Date(l.created_at).toLocaleString(),
+                "操作人": l.user_email,
+                "物料名称": l.asset_name,
+                "物料类型": l.media_type,
+                "生产来源": l.source_type,
+                "使用模型": l.model_name || 'N/A',
+                "消耗积分": l.credits_spent
+            }));
+            if(dataToExport.length === 0) return alert("当前无数据可导出");
+            const ws = XLSX.utils.json_to_sheet(dataToExport);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "数据导出");
-            XLSX.writeFile(wb, `AI导演_透视报表_${Date.now()}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, "物料全景明细");
+            XLSX.writeFile(wb, `AI导演_ERP明细报表_${Date.now()}.xlsx`);
         }
     </script>
 </body>
