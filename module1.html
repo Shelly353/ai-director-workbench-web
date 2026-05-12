@@ -301,19 +301,48 @@
 
         async function saveCurrentState() {
             try {
+                // 1. 本地临时中转站存储
                 await DB.set('extractedData', extractedData);
                 await DB.set('globalImagesPool', globalImagesPool); 
                 
+                // 2. 🌟 核心升级：跨过中转站，直接将最新进度实时打入团队云端！
                 const ctx = await DB.get('active_context');
                 if (ctx && ctx.projectId) {
-                    // 🌟 净化：因为 assets 是 jsonb，所以直接传 extractedData 对象
+                    // 同步整个项目的全局资产（图片、角色等）
                     await window.cloudSupabase.from('shared_projects')
                         .update({ assets: extractedData })
                         .eq('id', ctx.projectId);
+                        
+                    // 组装当前分集的所有文本和配置数据
+                    const snapshot = {
+                        scriptText: document.getElementById('scriptInput').value.trim(),
+                        extractedData: extractedData,
+                        llmModelSelect: document.getElementById('llmModelSelect').value,
+                        styleSelect: document.getElementById('styleSelect').value,
+                        ratioSelect: document.getElementById('ratioSelect').value
+                    };
+                    
+                    // 获取云端该项目最新的所有分集结构
+                    const { data: serverProj } = await window.cloudSupabase.from('shared_projects').select('data').eq('id', ctx.projectId).limit(1);
+                    if (serverProj && serverProj.length > 0) {
+                        let existingData = serverProj[0].data || {};
+                        if (typeof existingData === 'string') existingData = JSON.parse(existingData);
+
+                        let eps = existingData.episodes || [];
+                        const idx = eps.findIndex(e => String(e.id) === String(ctx.epId));
+                        
+                        // 定位到当前分集，强行覆写内容并实时同步给所有协作成员
+                        if (idx !== -1) {
+                            eps[idx].data = Object.assign(eps[idx].data || {}, snapshot); 
+                            await window.cloudSupabase.from('shared_projects').update({ data: existingData }).eq('id', ctx.projectId);
+                            console.log("✅ 实时同步至团队云端，协作成员刷新即可见！");
+                        }
+                    }
                 }
             } catch (e) {
                 console.error("保存共享状态失败", e);
             }
+        }
         }
         async function openProjectLibrary(cat, idx) {
             libraryTarget = { cat, idx };
