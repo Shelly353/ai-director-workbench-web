@@ -163,11 +163,6 @@
     </div>
 
     <script src="js/app.js?v=9000"></script>
-    <script src="js/prompts/01_extract.js"></script>
-    <script src="js/prompts/characters.js"></script>
-    <script src="js/prompts/scenes.js"></script>
-    <script src="js/prompts/props.js"></script>
-    <script src="js/prompts/effects.js"></script>
 
     <script>
         async function fetchCredits() {
@@ -208,7 +203,6 @@
         let currentUploadTarget = null; 
         let currentPreviewTarget = { cat: null, idx: null, type: null, b64: null, name: null }; 
 
-        // 🌟 核心：载入页面时，强制从云端大盘拉取数据，防止覆盖！
         window.onload = async () => {
             const userId = localStorage.getItem('userId');
             if (!userId) { window.location.replace('index.html'); return; }
@@ -226,14 +220,12 @@
                         let eps = existingData.episodes || [];
                         const ep = eps.find(e => String(e.id) === String(ctx.epId));
                         
-                        // 1. 恢复文本和下拉框
                         if (ep && ep.data) {
                             if (ep.data.scriptText) document.getElementById('scriptInput').value = ep.data.scriptText;
                             if (ep.data.llmModelSelect) document.getElementById('llmModelSelect').value = ep.data.llmModelSelect;
                             if (ep.data.styleSelect) document.getElementById('styleSelect').value = ep.data.styleSelect;
                             if (ep.data.ratioSelect) document.getElementById('ratioSelect').value = ep.data.ratioSelect;
                         }
-                        // 2. 恢复视觉资产大盘
                         if (serverProj[0].assets) {
                             extractedData = typeof serverProj[0].assets === 'string' ? JSON.parse(serverProj[0].assets) : serverProj[0].assets;
                             extractedData = { characters: [], scenes: [], props: [], effects: [], ...extractedData };
@@ -259,7 +251,6 @@
         function toggleConsole() { const w = document.getElementById('consoleWrapper'); w.classList.toggle('open'); document.getElementById('consoleToggleIcon').innerText = w.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开'; }
         function log(msg) { const c = document.getElementById('logConsole'); if(c){ c.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`; c.scrollTop = c.scrollHeight; } }
 
-        // 🌟 统一跳板引擎：凡是跳转都先保存在云端
         async function saveAndGoTo(url) {
             const btn = event.target;
             const orig = btn.innerText;
@@ -276,10 +267,8 @@
                 
                 const ctx = await DB.get('active_context');
                 if (ctx && ctx.projectId) {
-                    // 1. 实时把资源打入该项目的统一资产库
                     await window.cloudSupabase.from('shared_projects').update({ assets: extractedData }).eq('id', ctx.projectId);
                         
-                    // 2. 把当前分集的文本配置打入对应的数据格
                     const snapshot = {
                         scriptText: document.getElementById('scriptInput').value.trim(),
                         extractedData: extractedData,
@@ -303,7 +292,6 @@
             } catch (e) { console.error("保存共享状态失败", e); }
         }
 
-        // 🌟 修复：动态显示选中的选项卡资产
         async function openProjectLibrary(cat, idx) {
             libraryTarget = { cat, idx };
             document.getElementById('projectLibraryModal').style.display = 'flex';
@@ -311,7 +299,6 @@
         }
         
         async function loadLibraryTab(tabType) {
-            // UI样式切换
             ['characters', 'scenes', 'props', 'effects', 'private'].forEach(t => {
                 const btn = document.getElementById('tab_' + t);
                 if (btn) {
@@ -336,7 +323,6 @@
                 let pool = [];
 
                 if (tabType !== 'private') {
-                    // 读取该类别下的所有项目资源 (修复原来读不到场景的Bug)
                     const { data } = await window.cloudSupabase.from('shared_projects').select('assets').eq('id', ctx.projectId).single();
                     if (data && data.assets) {
                         let ast = typeof data.assets === 'string' ? JSON.parse(data.assets) : data.assets;
@@ -439,6 +425,144 @@
             }
         }
 
+        // 🌟 修复 1：重组 UI 结构，找回 AI 描述和本地上传按钮
+        function createAssetHTML(category, index, name, desc, type, label) {
+            const divId = `asset_${category}_${index}_${type}`;
+            const item = extractedData[category][index];
+            let currentDesc = category === 'scenes' ? (type === 'forward' ? item.forwardDesc : item.reverseDesc) : item.description;
+            let currentImg = category === 'scenes' ? (type === 'forward' ? item.forwardImg : item.reverseImg) : item.img;
+            
+            const imgClickAction = currentImg ? `openImageModal('${category}', ${index}, '${type}', '${currentImg}', '${name}')` : `uploadAssetResult('${category}', ${index}, '${type}')`;
+            const imgContent = currentImg ? `<img src="${currentImg}">` : `<span>+ 点击上传主图</span>`;
+            const safeName = (name || '').replace(/"/g, '&quot;');
+            
+            return `
+                <div class="asset-card" id="${divId}">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <input type="text" class="asset-name-input" value="${safeName}" oninput="updateDataName('${category}', ${index}, this.value)">
+                        <span style="font-size:11px; color:var(--gray);">${label}</span>
+                        <button class="btn-delete" onclick="deleteAsset('${category}', ${index})">🗑️</button>
+                    </div>
+                    
+                    <div class="img-preview-box" id="imgBox_${divId}" onclick="${imgClickAction}">${imgContent}</div>
+                    
+                    <div style="display:flex; gap:6px; margin-bottom:8px;">
+                        <button class="btn btn-outline" style="flex:1; font-size:11px; padding:6px 0;" onclick="autoGenerateDesc('${category}', ${index}, '${type}')">🤖 AI 描述</button>
+                        <button class="btn btn-outline" style="flex:1; font-size:11px; padding:6px 0;" onclick="uploadAssetResult('${category}', ${index}, '${type}')">📁 本地上传</button>
+                        <button class="btn btn-primary" style="flex:1; font-size:11px; padding:6px 0;" onclick="togglePrompt('${divId}')">✨ AI 配置</button>
+                    </div>
+
+                    <div class="prompt-dialog" id="promptDialog_${divId}">
+                        <div id="desc_${divId}" class="rich-input" contenteditable="true" data-placeholder="描述... 输入 @ 引用下方参考图" 
+                             oninput="updateDataDesc('${category}', ${index}, '${type}', this.innerHTML); handleRichInput(event, '${category}', ${index});">${currentDesc||''}</div>
+                        
+                        <div class="multi-img-grid">${(item.refImages || []).map((img, i) => `<div class="thumb-container"><img src="${img}" class="thumb-img"><div class="thumb-del" onclick="removeRefImg(event, '${category}', ${index}, ${i})">×</div></div>`).join('')}</div>
+                        <button class="btn btn-outline" style="width:100%; font-size:11px;" onclick="triggerMultiUpload('${category}', ${index})">+ 上传参考图</button>
+                        <button class="btn btn-outline" style="width:100%; font-size:11px; margin-top:5px; color:var(--primary);" onclick="openProjectLibrary('${category}', ${index})">📥 资产库导入参考</button>
+                        ${(!currentImg) ? `<button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="genAssetImage('${category}', ${index}, '${type}')">🖼️ 生图</button>` : ``}
+                    </div>
+                </div>`;
+        }
+
+        // 🌟 修复 2：编写被遗忘的 AI 描述自动生成逻辑
+        async function autoGenerateDesc(cat, idx, type) {
+            const item = extractedData[cat][idx];
+            const name = item.name;
+            if (!name || name.trim() === '') return alert("请先填写资产名称！");
+            
+            const selectedModel = document.getElementById('llmModelSelect').value || "deepseek-chat";
+            if (!(await checkAndDeductCredits('extract_elements', selectedModel))) return;
+            
+            const btn = event.target;
+            const origText = btn.innerText;
+            btn.innerText = "⏳...";
+            btn.disabled = true;
+            
+            const styleKey = document.getElementById('styleSelect').value;
+            const styleName = (styleKey && STYLE_MODIFIERS[styleKey]) ? STYLE_MODIFIERS[styleKey].name : "默认风格";
+            
+            let typeStr = cat === 'scenes' ? '场景' : (cat === 'characters' ? '角色' : (cat === 'props' ? '道具' : '特效'));
+            let prompt = `你是一个资深影视美术指导。请为名为“${name}”的${typeStr}写一段详细的外观视觉描述提示词(Prompt)，用于交给AI绘画大模型生图。\n要求：画面感强，细节丰富，突出特征。当前设定的全剧视觉风格是：${styleName}。\n请直接返回描述文本，不要带任何格式、前缀或废话。`;
+            
+            try {
+                let endpoint = selectedModel.includes('gemini') ? '/api/gemini/chat' : '/api/deepseek/chat';
+                const res = await apiRequest(endpoint, {
+                    model: selectedModel, stream: false,
+                    messages: [{ role: "user", content: prompt }]
+                });
+                let text = res.choices ? res.choices[0].message.content : res.candidates[0].content.parts[0].text;
+                text = text.trim();
+                
+                if (cat === 'scenes') {
+                    type === 'forward' ? item.forwardDesc = text : item.reverseDesc = text;
+                } else {
+                    item.description = text;
+                }
+                
+                saveCurrentState();
+                renderAssetsUI();
+                log(`✅ [${name}] AI 描述已生成。`);
+            } catch (e) {
+                alert("生成失败：" + e.message);
+            } finally {
+                btn.innerText = origText;
+                btn.disabled = false;
+            }
+        }
+
+        // 🌟 修复 3：找回并重构 @ 召唤参考图的监听逻辑
+        function handleRichInput(e, cat, idx) {
+            const sel = window.getSelection();
+            if(sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            const text = range.startContainer.textContent.substring(0, range.startOffset);
+            
+            if (text.endsWith('@')) {
+                const item = extractedData[cat][idx];
+                if (!item || !item.refImages || item.refImages.length === 0) return; // 没有参考图就不召唤
+                
+                savedRange = range.cloneRange();
+                const rect = range.getBoundingClientRect();
+                const menu = document.getElementById('mentionMenu');
+                menu.style.display = 'block';
+                menu.style.left = rect.left + 'px';
+                menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+                
+                document.getElementById('mentionMenuGrid').innerHTML = item.refImages.map((b64, imgIdx) => `
+                    <div style="aspect-ratio:1; border-radius:4px; overflow:hidden; cursor:pointer; border:1px solid #f2f3f5;" onmousedown="event.preventDefault();insertMentionPill('${b64}', '参考${imgIdx+1}')">
+                        <img src="${b64}" style="width:100%;height:100%;object-fit:cover;">
+                    </div>
+                `).join('');
+            } else {
+                document.getElementById('mentionMenu').style.display = 'none';
+            }
+        }
+
+        function insertMentionPill(b64, name) {
+            document.getElementById('mentionMenu').style.display = 'none';
+            const sel = window.getSelection();
+            sel.removeAllRanges(); sel.addRange(savedRange);
+            savedRange.setStart(savedRange.startContainer, savedRange.startOffset - 1);
+            savedRange.deleteContents();
+            
+            const span = document.createElement('span');
+            span.className = 'inline-pill'; span.contentEditable = 'false'; span.setAttribute('data-b64', b64);
+            span.innerHTML = `<img src="${b64}"><span>${name}</span>`;
+            
+            span.onmouseenter = (e) => {
+                const hp = document.getElementById('hoverPreview');
+                document.getElementById('hoverImg').src = b64;
+                hp.style.display = 'block'; hp.style.left = (e.clientX + 15) + 'px'; hp.style.top = (e.clientY + 15) + 'px';
+            };
+            span.onmouseleave = () => document.getElementById('hoverPreview').style.display = 'none';
+            
+            savedRange.insertNode(span);
+            savedRange.setStartAfter(span); savedRange.insertNode(document.createTextNode('\u00A0'));
+            savedRange.collapse(false); sel.removeAllRanges(); sel.addRange(savedRange);
+            
+            saveCurrentState(); // 自动保存修改
+        }
+
         function renderAssetsUI() {
             const openPanels = [];
             document.querySelectorAll('.prompt-dialog').forEach(el => { if (el.style.display === 'block') openPanels.push(el.id); });
@@ -464,40 +588,10 @@
             saveCurrentState();
         }
 
-        function createAssetHTML(category, index, name, desc, type, label) {
-            const divId = `asset_${category}_${index}_${type}`;
-            const item = extractedData[category][index];
-            let currentDesc = category === 'scenes' ? (type === 'forward' ? item.forwardDesc : item.reverseDesc) : item.description;
-            let currentImg = category === 'scenes' ? (type === 'forward' ? item.forwardImg : item.reverseImg) : item.img;
-            
-            const imgClickAction = currentImg ? `openImageModal('${category}', ${index}, '${type}', '${currentImg}', '${name}')` : `uploadAssetResult('${category}', ${index}, '${type}')`;
-            const imgContent = currentImg ? `<img src="${currentImg}">` : `<span>+ 上传图片</span>`;
-            const safeName = (name || '').replace(/"/g, '&quot;');
-            
-            return `
-                <div class="asset-card" id="${divId}">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <input type="text" class="asset-name-input" value="${safeName}" oninput="updateDataName('${category}', ${index}, this.value)">
-                        <span style="font-size:11px; color:var(--gray);">${label}</span>
-                        <button class="btn-delete" onclick="deleteAsset('${category}', ${index})">🗑️</button>
-                    </div>
-                    <div class="img-preview-box" id="imgBox_${divId}" onclick="${imgClickAction}">${imgContent}</div>
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn btn-primary" style="flex:1; font-size:12px;" onclick="togglePrompt('${divId}')">✨ AI 配置</button>
-                    </div>
-                    <div class="prompt-dialog" id="promptDialog_${divId}">
-                        <div id="desc_${divId}" class="rich-input" contenteditable="true" data-placeholder="描述..." oninput="updateDataDesc('${category}', ${index}, '${type}', this.innerHTML)">${currentDesc||''}</div>
-                        <div class="multi-img-grid">${(item.refImages || []).map((img, i) => `<div class="thumb-container"><img src="${img}" class="thumb-img"><div class="thumb-del" onclick="removeRefImg(event, '${category}', ${index}, ${i})">×</div></div>`).join('')}</div>
-                        <button class="btn btn-outline" style="width:100%; font-size:11px;" onclick="triggerMultiUpload('${category}', ${index})">+ 上传参考图</button>
-                        <button class="btn btn-outline" style="width:100%; font-size:11px; margin-top:5px; color:var(--primary);" onclick="openProjectLibrary('${category}', ${index})">📥 资产库导入</button>
-                        ${(!currentImg) ? `<button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="genAssetImage('${category}', ${index}, '${type}')">🖼️ 生图</button>` : ``}
-                    </div>
-                </div>`;
-        }
-
         function openImageModal(cat, idx, type, b64, name) { currentPreviewTarget = { cat, idx, type, b64, name }; document.getElementById('modalImg').src = b64; document.getElementById('imageModal').style.display = 'flex'; }
         function closeImageModal() { document.getElementById('imageModal').style.display = 'none'; }
         function downloadModalImage() { const a = document.createElement('a'); a.href = currentPreviewTarget.b64; a.download = `AI_${currentPreviewTarget.name}.png`; a.click(); }
+        
         function deleteModalImage() {
             if(!confirm("删除图片？")) return;
             const { cat, idx, type } = currentPreviewTarget;
@@ -506,6 +600,7 @@
             saveCurrentState(); renderAssetsUI(); closeImageModal();
         }
 
+        // 🌟 本地上传底层调用
         function uploadAssetResult(cat, idx, type) {
             triggerUpload(async (b64) => {
                 b64 = await window.uploadMediaToCloud(b64, 'png');
