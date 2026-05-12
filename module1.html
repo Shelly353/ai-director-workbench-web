@@ -191,8 +191,8 @@
             return true;
         }
 
-        // 🌟 防丢数据版：物料生产追踪引擎
-        async function logProduction(assetName, mediaType, sourceType, cost) {
+// 🌟 终极防漏单版：物料生产追踪引擎 (携带模型和积分)
+        async function logProduction(assetName, mediaType, sourceType, cost, modelName) {
             try {
                 let pid = 'unknown_project';
                 try {
@@ -208,9 +208,10 @@
                     asset_name: assetName,
                     media_type: mediaType,
                     source_type: sourceType,
-                    credits_spent: cost || 0
+                    credits_spent: cost || 0,
+                    model_name: modelName || 'N/A'
                 }]);
-                log(`✅ 已自动上报物料生产流水: [${mediaType}] ${assetName}`);
+                log(`✅ 已记录物料流水: [${mediaType}] ${assetName} (模型:${modelName}, 耗资:${cost||0})`);
             } catch(e) { console.warn("追踪日志记录失败", e); }
         }
 
@@ -410,7 +411,7 @@
 
             if (!(await checkAndDeductCredits('extract_elements', selectedModel))) return;
             // 🌟 埋点
-            logProduction("剧本视觉元素拆解", "文本", "AI生成", 1);
+            logProduction("全局视觉设定提炼", "文本", "AI生成", 1, selectedModel);
 
             btn.disabled = true;
             const originalText = btn.innerText;
@@ -509,7 +510,7 @@
                 if (!(await checkAndDeductCredits('ai_thought', currentLLM))) return;
 
                 // 🌟 埋点
-                logProduction(`提取: ${name}`, "文本", "AI生成", 1);
+                logProduction(`提取: ${name}`, "文本", "AI生成", 1,currentLLM);
 
                 inputEl.innerText = "🤖 思考中..."; 
                 let endpoint = currentLLM.startsWith('gemini') ? '/api/gemini/chat' : '/api/deepseek/chat';
@@ -663,7 +664,7 @@
                 else extractedData[cat][idx].img = b64;
                 renderAssetsUI(); 
                 // 🌟 埋点
-                logProduction(extractedData[cat][idx].name, "图片", "本地上传", 0);
+                logProduction(extractedData[cat][idx].name, "图片", "本地上传", 0, "本地文件");
             });
         }
 
@@ -678,7 +679,7 @@
                     if(!extractedData[cat][idx].refImages) extractedData[cat][idx].refImages = [];
                     extractedData[cat][idx].refImages.push(cloudUrl);
                     // 🌟 埋点
-                    logProduction(`[参考图] ${extractedData[cat][idx].name}`, "图片", "本地上传", 0);
+                    logProduction("[参考图] " + extractedData[cat][idx].name, "图片", "本地上传", 0, "本地文件");;
                 }
             }
             renderAssetsUI(); this.value = ""; 
@@ -717,7 +718,7 @@
 
             // 🌟 埋点
             const costEst = selectedModel.includes('doubao') ? 1 : 2;
-            logProduction(extractedData[cat][idx].name || '主图', "图片", "AI生成", costEst);
+            logProduction(extractedData[cat][idx].name || '主图', "图片", "AI生成", costEst, selectedModel);
 
             log(`📝 提交生图指令: ${fullPrompt}`);
             if (imgBox) imgBox.innerHTML = `<span>🎨 正在生图...</span>`;
