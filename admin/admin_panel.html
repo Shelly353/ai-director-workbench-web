@@ -10,7 +10,7 @@
     
     <style>
         /* 强制滚动与背景重置 */
-        html, body { overflow-y: auto !important; height: auto !important; margin: 0; padding: 0; background-color: #f4f7f9 !important; color: #1d2129; font-family: -apple-system, system-ui, sans-serif; padding-bottom: 60px; }
+        html, body { overflow-y: auto !important; height: auto !important; min-height: 100vh; background-color: #f4f7f9 !important; color: #1d2129; font-family: -apple-system, system-ui, sans-serif; padding-bottom: 60px; }
         
         /* 导航栏 */
         .erp-header { background: #fff; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e6eb; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
@@ -171,26 +171,25 @@
 
     <script src="../js/app.js?v=9999"></script>
     <script>
-        // 核心原始数据池 (受数据库直接支持)
+        // 核心原始数据池
         let rawCreditLogs = [];
         let rawProdLogs = [];
         let rawProjects = [];
 
-        // 过滤后的数据池 (受日期、项目 Tab 影响)
+        // 过滤后的数据池
         let fCreditLogs = [];
         let fProdLogs = [];
         
         let currentProjectId = 'all';
         let currentView = 'overview';
-        let charts = {}; // 图表实例库
+        let charts = {}; 
 
         window.onload = async () => {
             if (!window.cloudSupabase) return alert("❌ 数据库连接异常");
-            // 初始化当日数据 (读取缓存或请求网络)
             await loadDataFromCacheOrDB();
         };
 
-        // 🌟 1. 每日快照缓存逻辑
+        // 1. 每日快照缓存逻辑
         async function loadDataFromCacheOrDB() {
             const today = new Date().toLocaleDateString('zh-CN');
             const cacheStr = localStorage.getItem('erp_data_cache_v2');
@@ -198,16 +197,16 @@
             if (cacheStr) {
                 const cache = JSON.parse(cacheStr);
                 if (cache.date === today) {
-                    // 今日已有快照，直接使用
-                    rawCreditLogs = cache.creditLogs;
-                    rawProdLogs = cache.prodLogs;
-                    rawProjects = cache.projects;
+                    // 🛡️ 强制保证缓存读出来的一定是 Array
+                    rawCreditLogs = Array.isArray(cache.creditLogs) ? cache.creditLogs : [];
+                    rawProdLogs = Array.isArray(cache.prodLogs) ? cache.prodLogs : [];
+                    rawProjects = Array.isArray(cache.projects) ? cache.projects : [];
+                    
                     document.getElementById('cacheStatusText').innerHTML = `✅ 已加载今日快照数据 (生成于: ${cache.time})`;
                     initUI();
                     return;
                 }
             }
-            // 否则，强制请求数据库
             await loadDataFromDB(false);
         }
 
@@ -217,31 +216,35 @@
                 const { data: { user } } = await window.cloudSupabase.auth.getUser();
                 if (!user) return location.href = '../index.html';
 
-                // 并发请求三大表
                 const [projRes, creditRes, prodRes] = await Promise.all([
                     window.cloudSupabase.from('shared_projects').select('*'),
                     window.cloudSupabase.rpc('get_admin_resource_stats', { target_email: user.email }),
                     window.cloudSupabase.from('asset_production_logs').select('*')
                 ]);
 
-                // 项目与人员
                 const { data: rawMembers } = await window.cloudSupabase.from('project_members').select('*');
-                rawProjects = (projRes.data || []).map(p => ({
+                
+                // 处理项目数据
+                rawProjects = Array.isArray(projRes.data) ? projRes.data.map(p => ({
                     ...p, members: (rawMembers || []).filter(m => m.project_id === p.id).map(m => ({ email: m.user_email }))
-                }));
+                })) : [];
 
-                // 财务流水兜底
+                // 🛡️ 终极防御：处理财务流水，确保绝对是数组
                 if (creditRes.error) {
                     const backup = await window.cloudSupabase.from('credit_logs').select('*').order('created_at', { ascending: false });
-                    rawCreditLogs = backup.data || [];
+                    rawCreditLogs = Array.isArray(backup.data) ? backup.data : [];
                 } else {
-                    rawCreditLogs = creditRes.data ? (creditRes.data.usage_list || creditRes.data) : [];
+                    let cData = creditRes.data;
+                    if (typeof cData === 'string') { try { cData = JSON.parse(cData); } catch(e){} }
+                    rawCreditLogs = cData ? (cData.usage_list || cData) : [];
+                    if (!Array.isArray(rawCreditLogs)) rawCreditLogs = [];
                 }
 
-                // 物料流水
-                rawProdLogs = prodRes.data || [];
+                // 🛡️ 终极防御：处理物料流水，确保绝对是数组
+                let pData = prodRes.data;
+                if (typeof pData === 'string') { try { pData = JSON.parse(pData); } catch(e){} }
+                rawProdLogs = Array.isArray(pData) ? pData : [];
 
-                // 制作快照存入本地
                 const timeStr = new Date().toLocaleTimeString('zh-CN');
                 localStorage.setItem('erp_data_cache_v2', JSON.stringify({
                     date: new Date().toLocaleDateString('zh-CN'), time: timeStr,
@@ -257,24 +260,23 @@
             }
         }
 
-        // 初始化界面
         function initUI() {
-            // 渲染项目 Tab
             const row = document.getElementById('projectTabs');
             row.innerHTML = `<div class="tab-p active" id="ptab_all" onclick="switchProject('all')">全盘总览</div>`;
             rawProjects.forEach(p => {
                 row.innerHTML += `<div class="tab-p" id="ptab_${p.id}" onclick="switchProject('${p.id}')">${p.name}</div>`;
             });
-            applyFilters(); // 触发日期和数据分配
+            applyFilters();
         }
 
-        // 🌟 2. 过滤器逻辑
+        // 🌟 2. 过滤器逻辑 (解决 filter 报错的核心)
         function applyFilters() {
             const startVal = document.getElementById('startDate').value;
             const endVal = document.getElementById('endDate').value;
             
-            let cl = rawCreditLogs;
-            let pl = rawProdLogs;
+            // 每次过滤前，确保 cl 和 pl 是真正的数组
+            let cl = Array.isArray(rawCreditLogs) ? rawCreditLogs : [];
+            let pl = Array.isArray(rawProdLogs) ? rawProdLogs : [];
 
             if (startVal) {
                 const sTime = new Date(startVal).getTime();
@@ -282,7 +284,7 @@
                 pl = pl.filter(l => new Date(l.created_at).getTime() >= sTime);
             }
             if (endVal) {
-                const eTime = new Date(endVal).getTime() + 86400000; // 包含当日
+                const eTime = new Date(endVal).getTime() + 86400000; 
                 cl = cl.filter(l => new Date(l.created_at).getTime() <= eTime);
                 pl = pl.filter(l => new Date(l.created_at).getTime() <= eTime);
             }
@@ -293,7 +295,6 @@
             switchProject(currentProjectId);
         }
 
-        // 视图切换引擎
         function switchView(v) {
             currentView = v;
             document.querySelectorAll('.tab-v').forEach(b => b.classList.toggle('active', b.id === 'v_'+v));
@@ -314,9 +315,6 @@
             if(currentView === 'episodes') renderEpisodes(proj);
         }
 
-        // ================== 看板渲染逻辑 ==================
-
-        // 视图1：大盘财务
         function renderOverview(clogs, plogs, pid) {
             document.getElementById('m_total_cost').innerText = clogs.reduce((s, l) => s + (l.credits_spent||0), 0);
             document.getElementById('m_prod_count').innerText = plogs.length;
@@ -327,7 +325,6 @@
             else rawProjects.find(p => p.id === pid)?.members?.forEach(m => users.add(m.email));
             document.getElementById('m_team_size').innerText = Math.max(users.size, 1);
 
-            // 图表1：趋势
             const dateMap = {};
             clogs.forEach(l => { const d = new Date(l.created_at).toLocaleDateString(); dateMap[d] = (dateMap[d]||0) + l.credits_spent; });
             const sorted = Object.keys(dateMap).sort();
@@ -339,7 +336,6 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend:{display:false} } }
             });
 
-            // 图表2：人员消耗
             const uMap = {};
             clogs.forEach(l => { const n = l.user_email.split('@')[0]; uMap[n] = (uMap[n]||0) + l.credits_spent; });
             const uNames = Object.keys(uMap).sort((a,b) => uMap[b] - uMap[a]);
@@ -352,12 +348,10 @@
             });
         }
 
-        // 视图2：成员物料透视
         let currentViewProdLogs = [];
         function renderMemberInit(plogs, pid) {
             currentViewProdLogs = plogs;
             
-            // 获取项目相关所有用户
             let users = new Set();
             if(pid === 'all') rawProjects.forEach(p => p.members?.forEach(m => users.add(m.email)));
             else rawProjects.find(p => p.id === pid)?.members?.forEach(m => users.add(m.email));
@@ -375,12 +369,10 @@
             const u = document.getElementById('memberSelect').value;
             const uLogs = currentViewProdLogs.filter(l => l.user_email === u);
 
-            // 指标
             document.getElementById('u_cost').innerText = uLogs.reduce((s,l) => s + (l.credits_spent||0), 0);
             document.getElementById('u_img').innerText = uLogs.filter(l => l.media_type.includes('图')).length;
             document.getElementById('u_txt').innerText = uLogs.filter(l => l.media_type.includes('文本')).length;
 
-            // 饼图：产出分布
             const sMap = {};
             uLogs.forEach(l => {
                 const k = `${l.media_type} - ${l.source_type}`;
@@ -394,7 +386,6 @@
                 options: { responsive: true, maintainAspectRatio: false, cutout: '60%' }
             });
 
-            // 表格：物料生产详细流水 (取代之前的财务动作，直接看物料！)
             const body = document.getElementById('memberProdBody');
             body.innerHTML = uLogs.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)).map(l => {
                 const bSrc = l.source_type === 'AI生成' ? 'b-ai' : 'b-local';
@@ -410,7 +401,6 @@
             if(uLogs.length === 0) body.innerHTML = '<tr><td colspan="5" style="text-align:center;">在此区间内无物料生产记录</td></tr>';
         }
 
-        // 视图3：分集与存量
         function renderEpisodes(proj) {
             const eb = document.getElementById('epTableBody');
             const ab = document.getElementById('assetTableBody');
