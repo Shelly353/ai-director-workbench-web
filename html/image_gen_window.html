@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <title>AI 独立生图控制台</title>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
     <link rel="stylesheet" href="../css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -53,9 +51,10 @@
         .btn-success { background: #00b42a; color: #fff; }
         .btn:disabled { background: #e5e6eb; color: #86909c; cursor: not-allowed; border-color: transparent; }
 
+        /* 🌟 核心修复：资产库弹窗样式完全对齐 Module1/2 */
         #globalAssetModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
-        #globalAssetContent { background: #fff; width: 80%; height: 80%; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; }
-        #globalAssetGrid { display: flex; flex-wrap: wrap; gap: 15px; overflow-y: auto; flex: 1; margin-top: 15px; }
+        #globalAssetContent { background: #fff; width: 80%; height: 80%; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        #globalAssetGrid { display: flex; flex-wrap: wrap; gap: 15px; overflow-y: auto; flex: 1; margin-top: 15px; align-content: flex-start; }
 
         #mentionMenu { display: none; position: fixed; background: #fff; border: 1px solid #ddd; padding: 8px; border-radius: 8px; z-index: 2000; box-shadow: 0 8px 24px rgba(0,0,0,0.15); width: 260px; max-height: 200px; overflow-y: auto; }
     </style>
@@ -126,10 +125,19 @@
 
     <div id="globalAssetModal">
         <div id="globalAssetContent">
-            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:10px;">
-                <h3 style="margin:0;">选择要导入的云端资产</h3>
-                <span style="cursor:pointer; font-size:24px;" onclick="document.getElementById('globalAssetModal').style.display='none'">×</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:15px;">
+                <h3 style="margin:0;">📥 从项目资产库提取至画板</h3>
+                <span style="cursor:pointer; font-size:24px; color:#86909c; line-height:1;" onclick="document.getElementById('globalAssetModal').style.display='none'">×</span>
             </div>
+            
+            <div style="display:flex; gap:10px; margin-top:15px; border-bottom:1px solid #eee; padding-bottom:15px; flex-wrap:wrap;">
+                <button id="tab_characters" class="btn btn-primary" onclick="loadLibraryTab('characters')">👤 人物</button>
+                <button id="tab_scenes" class="btn btn-outline" onclick="loadLibraryTab('scenes')">🏞️ 场景</button>
+                <button id="tab_props" class="btn btn-outline" onclick="loadLibraryTab('props')">🧸 道具</button>
+                <button id="tab_effects" class="btn btn-outline" onclick="loadLibraryTab('effects')">✨ 特效</button>
+                <button id="tab_private" class="btn btn-outline" style="margin-left:auto; border-color:#722ed1; color:#722ed1;" onclick="loadLibraryTab('private')">🔒 我的私有关键帧</button>
+            </div>
+
             <div id="globalAssetGrid"></div>
         </div>
     </div>
@@ -146,10 +154,6 @@
 
     <script src="../js/app.js?v=9999"></script>
     <script>
-        // ==========================================
-        // 🌟 彻底清除自己创建的 supabaseClient，统一使用 window.cloudSupabase
-        // ==========================================
-
         async function fetchCredits() {
             const userId = localStorage.getItem('userId');
             if (!userId || !window.cloudSupabase) return;
@@ -171,35 +175,15 @@
                 is_gemini: isGemini 
             });
 
-            if (error) {
-                alert(`❌ 操作失败：${error.message}`);
-                return false;
-            }
-
+            if (error) { alert(`❌ 操作失败：${error.message}`); return false; }
             document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
             localStorage.setItem('userCredits', newCredits);
             log(`💎 扣费成功，剩余 ${newCredits} 💎。`);
             return true;
         }
 
-        // ==========================================
-        // UI 与生图控制逻辑
-        // ==========================================
-        function toggleConsole() {
-            const wrapper = document.getElementById('consoleWrapper');
-            const icon = document.getElementById('consoleToggleIcon');
-            wrapper.classList.toggle('open');
-            icon.innerText = wrapper.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开';
-        }
-
-        function log(msg) {
-            const consoleEl = document.getElementById('logConsole');
-            if (consoleEl) {
-                const time = new Date().toLocaleTimeString();
-                consoleEl.innerText += `[${time}] ${msg}\n`;
-                consoleEl.scrollTop = consoleEl.scrollHeight;
-            }
-        }
+        function toggleConsole() { const w = document.getElementById('consoleWrapper'); w.classList.toggle('open'); document.getElementById('consoleToggleIcon').innerText = w.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开'; }
+        function log(msg) { const c = document.getElementById('logConsole'); if(c){ c.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`; c.scrollTop = c.scrollHeight; } }
 
         const STYLE_MODIFIERS = {
             "realistic": "Award-winning photography, photorealistic portrait, highly detailed skin texture, 2k resolution, cinematic lighting, shot on 35mm lens, realistic human skin. ",
@@ -233,11 +217,29 @@
             renderRefGrid();
         };
 
-        // --- 🌟 核心升级：实时云端拉取共享与私有资产 ---
+        // --- 🌟 核心升级：包含选项卡切换和分类拉取功能 ---
         async function openGlobalAssetModal() {
+            document.getElementById('globalAssetModal').style.display = 'flex';
+            loadLibraryTab('characters'); // 默认选中人物选项卡
+        }
+
+        async function loadLibraryTab(tabType) {
+            // 切换按钮样式
+            ['characters', 'scenes', 'props', 'effects', 'private'].forEach(t => {
+                const btn = document.getElementById('tab_' + t);
+                if (btn) {
+                    if (t === 'private') {
+                        btn.className = (t === tabType) ? 'btn btn-primary' : 'btn btn-outline';
+                        btn.style.color = (t === tabType) ? '#fff' : '#722ed1';
+                        btn.style.borderColor = (t === tabType) ? 'transparent' : '#722ed1';
+                    } else {
+                        btn.className = (t === tabType) ? 'btn btn-primary' : 'btn btn-outline';
+                    }
+                }
+            });
+
             const grid = document.getElementById('globalAssetGrid');
             grid.innerHTML = "<div style='width:100%; text-align:center; padding:40px; color:#86909c;'>⏳ 正在从云端拉取资产...</div>";
-            document.getElementById('globalAssetModal').style.display = 'flex';
 
             try {
                 const ctx = await DB.get('active_context');
@@ -246,40 +248,37 @@
                 const { data: { user } } = await window.cloudSupabase.auth.getUser();
                 let pool = [];
 
-                // 1. 获取共享大盘资产
-                const { data: sharedData } = await window.cloudSupabase.from('shared_projects').select('assets').eq('id', ctx.projectId).single();
-                if (sharedData && sharedData.assets) {
-                    let ast = typeof sharedData.assets === 'string' ? JSON.parse(sharedData.assets) : sharedData.assets;
-                    ['characters', 'props', 'effects'].forEach(c => {
-                        if(ast[c]) ast[c].forEach(x => { 
-                            if(x.img) pool.push({name: x.name, b64: x.img, label: '共享资产'}); 
-                            if(x.refImages) x.refImages.forEach(r => pool.push({name: x.name+'-参考', b64: r, label: '共享资产'})); 
-                        });
-                    });
-                    if(ast.scenes) ast.scenes.forEach(s => { 
-                        if(s.forwardImg) pool.push({name: s.name+'-正视', b64: s.forwardImg, label: '共享场景'});
-                        if(s.reverseImg) pool.push({name: s.name+'-反打', b64: s.reverseImg, label: '共享场景'});
-                        if(s.refImages) s.refImages.forEach(r => pool.push({name: s.name+'-参考', b64: r, label: '共享场景'}));
-                    });
-                }
-
-                // 2. 获取私有关键帧
-                const { data: privateData } = await window.cloudSupabase.from('private_keyframes')
-                    .select('img_url')
-                    .eq('project_id', ctx.projectId)
-                    .eq('user_email', user.email);
-                
-                if (privateData) {
-                    privateData.forEach((k, i) => pool.push({ name: `私有图片 ${i+1}`, b64: k.img_url, label: '私有' }));
+                if (tabType !== 'private') {
+                    // 精准拉取指定分类的资源
+                    const { data: sharedData } = await window.cloudSupabase.from('shared_projects').select('assets').eq('id', ctx.projectId).single();
+                    if (sharedData && sharedData.assets) {
+                        let ast = typeof sharedData.assets === 'string' ? JSON.parse(sharedData.assets) : sharedData.assets;
+                        if (ast[tabType]) {
+                            ast[tabType].forEach(item => {
+                                if (tabType === 'scenes') {
+                                    if(item.forwardImg) pool.push({name: item.name+'-正视', b64: item.forwardImg, label: '场景'});
+                                    if(item.reverseImg) pool.push({name: item.name+'-反打', b64: item.reverseImg, label: '场景'});
+                                } else {
+                                    if(item.img) pool.push({name: item.name, b64: item.img, label: '资产'});
+                                }
+                                if(item.refImages && item.refImages.length > 0) {
+                                    item.refImages.forEach((rUrl, i) => { pool.push({name: `${item.name}-参考${i+1}`, b64: rUrl, label: '参考'}); });
+                                }
+                            });
+                        }
+                    }
+                } else {
+                    const { data: privateData } = await window.cloudSupabase.from('private_keyframes').select('img_url').eq('project_id', ctx.projectId).eq('user_email', user.email);
+                    if (privateData) privateData.forEach((k, i) => pool.push({ name: `私有图片 ${i+1}`, b64: k.img_url, label: '私有' }));
                 }
 
                 if (pool.length === 0) {
-                    grid.innerHTML = "<div style='width:100%; text-align:center; padding:50px; color:#c9cdd4;'>暂无任何云端资产数据。</div>";
+                    grid.innerHTML = "<div style='width:100%; text-align:center; padding:50px; color:#c9cdd4;'>此分类下暂无资产数据。</div>";
                     return;
                 }
 
                 grid.innerHTML = pool.map(item => `
-                    <div style="width:110px; cursor:pointer; text-align:center; padding:5px; border:2px solid transparent; border-radius:8px;" 
+                    <div style="width:110px; cursor:pointer; text-align:center; padding:5px; border:2px solid transparent; border-radius:8px; transition:0.2s;" 
                          onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'" 
                          onclick="addRefToPool('${item.name}', '${item.b64}')">
                         <img src="${item.b64}" style="width:100px; height:100px; object-fit:cover; border-radius:6px; border:1px solid #e5e6eb;">
@@ -303,10 +302,7 @@
         function renderRefGrid() {
             const grid = document.getElementById('refGrid');
             if (!grid) return;
-            if (localRefPool.length === 0) {
-                grid.innerHTML = '<span style="font-size:12px; color:#c9cdd4;">暂无参考图，请导入或上传。</span>';
-                return;
-            }
+            if (localRefPool.length === 0) { grid.innerHTML = '<span style="font-size:12px; color:#c9cdd4;">暂无参考图，请导入或上传。</span>'; return; }
             grid.innerHTML = localRefPool.map((item, i) => `
                 <div class="ref-item"><img src="${item.b64}"><div class="ref-del" onclick="removeRef(${i})">×</div></div>
             `).join('');
@@ -366,8 +362,7 @@
             const selectedModel = modelSelect.value;
             const ratioVal = document.getElementById('ratioSelect').value;
             
-            let rawText = "";
-            let inlineImgs = [];
+            let rawText = ""; let inlineImgs = [];
             
             inputEl.childNodes.forEach(node => {
                 if (node.nodeType === Node.TEXT_NODE) rawText += node.textContent;
@@ -380,7 +375,6 @@
             });
 
             if(!rawText.trim() && inlineImgs.length === 0) return alert("提示词不能为空！");
-
             if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
 
             const resVal = document.getElementById('resolutionSelect').value;
@@ -415,10 +409,7 @@
             status.innerText = `🚀 正在提交...`;
 
             try {
-                const res = await apiRequest('/api/image/create', { 
-                    model: selectedModel, prompt: finalPrompt, images: inlineImgs, ratio: ratioVal, size: sizeVal, async_mode: true
-                });
-
+                const res = await apiRequest('/api/image/create', { model: selectedModel, prompt: finalPrompt, images: inlineImgs, ratio: ratioVal, size: sizeVal, async_mode: true });
                 let b64 = "";
 
                 if (res.taskId) {
@@ -428,11 +419,7 @@
                         let currentUrl = typeof API_BASE !== 'undefined' ? API_BASE : "https://proxy-server-web.onrender.com"; 
                         const userToken = localStorage.getItem('userToken');
 
-                        const pollRes = await fetch(`${currentUrl}/api/dashscope/poll/${res.taskId}`, {
-                            method: 'GET',
-                            headers: { 'Authorization': `Bearer ${userToken}` } 
-                        });
-                        
+                        const pollRes = await fetch(`${currentUrl}/api/dashscope/poll/${res.taskId}`, { method: 'GET', headers: { 'Authorization': `Bearer ${userToken}` } });
                         if (!pollRes.ok) throw new Error(`轮询失败 HTTP ${pollRes.status}`);
                         const pollData = await pollRes.json();
                         const taskStatus = pollData.output?.task_status || pollData.task_status;
@@ -446,16 +433,11 @@
                                 if (imgItem) b64 = imgItem.image || imgItem.url; else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
                             } else if (out.image_url) b64 = out.image_url;
                             else if (out.image) b64 = out.image;
-                            
                             if (!b64) throw new Error("提取图片链接失败");
                             break;
-                        } else if (taskStatus === 'FAILED') {
-                            throw new Error(`阿里云生图失败: ${pollData.output?.message || pollData.message}`);
-                        }
+                        } else if (taskStatus === 'FAILED') { throw new Error(`阿里云生图失败: ${pollData.output?.message || pollData.message}`); }
                     }
-                } else if (res.data && res.data.length > 0) {
-                    b64 = res.data[0].url;
-                } else throw new Error("未包含图片地址或 TaskID");
+                } else if (res.data && res.data.length > 0) { b64 = res.data[0].url; } else throw new Error("未包含图片地址或 TaskID");
 
                 const imgEl = document.getElementById('resultImg'); 
                 if (b64.startsWith('http')) {
@@ -474,67 +456,35 @@
                 status.innerText = "☁️ 正在永久保存至云端...";
                 b64 = await window.uploadMediaToCloud(b64, 'png');
                 
-                generatedB64 = b64;
-                imgEl.src = b64; 
+                generatedB64 = b64; imgEl.src = b64; 
                 imgEl.onload = () => { status.style.display = 'none'; imgEl.style.display = 'block'; };
 
-                document.getElementById('btnConfirm').style.display = 'block';
-                document.getElementById('btnDownload').style.display = 'block';
-                document.getElementById('btnDelete').style.display = 'block';
-                
+                document.getElementById('btnConfirm').style.display = 'block'; document.getElementById('btnDownload').style.display = 'block'; document.getElementById('btnDelete').style.display = 'block';
             } catch (e) {
                 status.innerText = `❌ 生图失败: ${e.message}`; log(`❌ 生图失败: ${e.message}`);
-            } finally {
-                btn.disabled = false; btn.innerText = "🚀 重新生成画面";
-            }
+            } finally { btn.disabled = false; btn.innerText = "🚀 重新生成画面"; }
         }
 
         function clearResult() {
             generatedB64 = null;
-            document.getElementById('resultImg').style.display = 'none';
-            document.getElementById('resultImg').src = '';
-            document.getElementById('resultStatus').style.display = 'block';
-            document.getElementById('resultStatus').innerText = "等待生图...";
-            document.getElementById('btnConfirm').style.display = 'none';
-            document.getElementById('btnDownload').style.display = 'none';
-            document.getElementById('btnDelete').style.display = 'none';
+            document.getElementById('resultImg').style.display = 'none'; document.getElementById('resultImg').src = '';
+            document.getElementById('resultStatus').style.display = 'block'; document.getElementById('resultStatus').innerText = "等待生图...";
+            document.getElementById('btnConfirm').style.display = 'none'; document.getElementById('btnDownload').style.display = 'none'; document.getElementById('btnDelete').style.display = 'none';
         }
 
-        function downloadImage() {
-            if(!generatedB64) return;
-            const a = document.createElement('a');
-            a.href = generatedB64;
-            a.download = `AI_Gen_${Date.now()}.png`; a.click();
-        }
+        function downloadImage() { if(!generatedB64) return; const a = document.createElement('a'); a.href = generatedB64; a.download = `AI_Gen_${Date.now()}.png`; a.click(); }
 
         async function confirmAndReturn() {
             if(!generatedB64) return;
-            
             try {
                 const ctx = await DB.get('active_context');
                 const { data: { user } } = await window.cloudSupabase.auth.getUser();
-                
                 if (!ctx || !ctx.projectId) throw new Error("无法识别当前项目归属！");
-
-                // 🌟 使用全局 window.cloudSupabase
-                await window.cloudSupabase.from('private_keyframes').insert([{
-                    project_id: ctx.projectId,
-                    user_email: user.email,
-                    img_url: generatedB64
-                }]);
-                
+                await window.cloudSupabase.from('private_keyframes').insert([{ project_id: ctx.projectId, user_email: user.email, img_url: generatedB64 }]);
                 log(`✅ 已安全保存至您的【私有关键帧库】，团队可见！`);
-                
-            } catch (err) {
-                console.error("保存私有关键帧失败:", err);
-                log(`❌ 保存失败: ${err.message}`);
-            }
+            } catch (err) { console.error("保存私有关键帧失败:", err); log(`❌ 保存失败: ${err.message}`); }
 
-            if (window.parent && window.parent.addGeneratedImageToRow) {
-                window.parent.addGeneratedImageToRow(rowId, generatedB64);
-            } else {
-                alert("✅ 已成功保存到云端资产库！");
-            }
+            if (window.parent && window.parent.addGeneratedImageToRow) { window.parent.addGeneratedImageToRow(rowId, generatedB64); } else { alert("✅ 已成功保存到云端资产库！"); }
         }
     </script>
 </body>
