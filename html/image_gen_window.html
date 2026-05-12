@@ -51,7 +51,6 @@
         .btn-success { background: #00b42a; color: #fff; }
         .btn:disabled { background: #e5e6eb; color: #86909c; cursor: not-allowed; border-color: transparent; }
 
-        /* 🌟 核心修复：资产库弹窗样式完全对齐 Module1/2 */
         #globalAssetModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
         #globalAssetContent { background: #fff; width: 80%; height: 80%; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
         #globalAssetGrid { display: flex; flex-wrap: wrap; gap: 15px; overflow-y: auto; flex: 1; margin-top: 15px; align-content: flex-start; }
@@ -182,6 +181,30 @@
             return true;
         }
 
+        // 🌟 物料追踪埋点
+        async function logProduction(assetName, mediaType, sourceType, cost, modelName) {
+            try {
+                let pid = 'unknown_project';
+                try {
+                    const ctx = await DB.get('active_context');
+                    if (ctx && ctx.projectId) pid = ctx.projectId;
+                } catch(err) {}
+
+                const { data: { user } } = await window.cloudSupabase.auth.getUser();
+                if (!user) return;
+                
+                await window.cloudSupabase.from('asset_production_logs').insert([{
+                    project_id: pid,
+                    user_email: user.email,
+                    asset_name: assetName,
+                    media_type: mediaType,
+                    source_type: sourceType,
+                    credits_spent: Number(cost) || 0,
+                    model_name: modelName || 'N/A'
+                }]);
+            } catch(e) { console.warn("追踪日志记录失败", e); }
+        }
+
         function toggleConsole() { const w = document.getElementById('consoleWrapper'); w.classList.toggle('open'); document.getElementById('consoleToggleIcon').innerText = w.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开'; }
         function log(msg) { const c = document.getElementById('logConsole'); if(c){ c.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`; c.scrollTop = c.scrollHeight; } }
 
@@ -204,7 +227,7 @@
             if (!userId) { window.location.replace('index.html'); return; }
 
             await fetchCredits();
-            document.getElementById('rowIdDisplay').innerText = `目标分镜: ${rowId || '未知'}`;
+            document.getElementById('rowIdDisplay').innerText = `目标分镜: ${rowId || '独立面板'}`;
             
             globalStyle = await DB.get('styleSelect');
             const savedRatio = await DB.get('globalRatio');
@@ -217,14 +240,12 @@
             renderRefGrid();
         };
 
-        // --- 🌟 核心升级：包含选项卡切换和分类拉取功能 ---
         async function openGlobalAssetModal() {
             document.getElementById('globalAssetModal').style.display = 'flex';
-            loadLibraryTab('characters'); // 默认选中人物选项卡
+            loadLibraryTab('characters'); 
         }
 
         async function loadLibraryTab(tabType) {
-            // 切换按钮样式
             ['characters', 'scenes', 'props', 'effects', 'private'].forEach(t => {
                 const btn = document.getElementById('tab_' + t);
                 if (btn) {
@@ -249,7 +270,6 @@
                 let pool = [];
 
                 if (tabType !== 'private') {
-                    // 精准拉取指定分类的资源
                     const { data: sharedData } = await window.cloudSupabase.from('shared_projects').select('assets').eq('id', ctx.projectId).single();
                     if (sharedData && sharedData.assets) {
                         let ast = typeof sharedData.assets === 'string' ? JSON.parse(sharedData.assets) : sharedData.assets;
@@ -318,6 +338,8 @@
                     localRefPool.push({ name: file.name || '本地图片', b64: cloudUrl });
                     renderRefGrid();
                     log(`✅ 参考图已就绪：${cloudUrl}`);
+                    // 🌟 埋点上传
+                    logProduction(file.name || '本地参考图', "图片", "本地上传", 0, "本地文件");
                 }
             } catch (err) { log(`❌ 上传失败: ${err.message}`); }
             e.target.value = '';
@@ -376,6 +398,10 @@
 
             if(!rawText.trim() && inlineImgs.length === 0) return alert("提示词不能为空！");
             if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
+
+            // 🌟 埋点记录生图消耗
+            const costEst = selectedModel.includes('doubao') ? 1 : 2;
+            logProduction("浮窗视效抽卡", "图片", "AI生成", costEst, selectedModel);
 
             const resVal = document.getElementById('resolutionSelect').value;
             let sizeVal = "1920*1080"; 
@@ -474,7 +500,7 @@
 
         function downloadImage() { if(!generatedB64) return; const a = document.createElement('a'); a.href = generatedB64; a.download = `AI_Gen_${Date.now()}.png`; a.click(); }
 
-      async function confirmAndReturn() {
+        async function confirmAndReturn() {
             if(!generatedB64) return;
             
             try {
@@ -483,7 +509,6 @@
                 
                 if (!ctx || !ctx.projectId) throw new Error("无法识别当前项目归属！");
 
-                // 🌟 核心升级：加上 .select() 照妖镜，强迫数据库返回结果
                 const { data, error } = await window.cloudSupabase.from('private_keyframes').insert([{ 
                     project_id: ctx.projectId, 
                     user_email: user.email, 
@@ -491,23 +516,18 @@
                 }]).select();
                 
                 if (error) throw error;
-                
-                // 如果没报错，但返回了 0 行数据，说明被静默拦截了
                 if (!data || data.length === 0) {
-                    alert("🚨 保存被静默拦截！请去 Supabase 后台检查 private_keyframes 表的 RLS 是否关闭！");
-                    return; // 拦截后停止执行，不再关闭窗口
+                    alert("🚨 保存被静默拦截！请检查 RLS 设置。");
+                    return; 
                 }
-                
                 log(`✅ 已安全保存至您的【私有关键帧库】！`);
-                
             } catch (err) {
                 console.error("保存私有关键帧失败:", err);
                 log(`❌ 保存失败: ${err.message}`);
-                alert(`保存失败：${err.message}\n(如果提示 relation does not exist，请去 Supabase 运行建表 SQL)`);
-                return; // 报错后停止执行
+                alert(`保存失败：${err.message}`);
+                return; 
             }
 
-            // 只有当云端真正存进去了，才把图片加到分镜并关闭窗口
             if (window.parent && window.parent.addGeneratedImageToRow) { 
                 window.parent.addGeneratedImageToRow(rowId, generatedB64); 
             } else { 
