@@ -7,15 +7,33 @@ var API_BASE = "https://proxy-server-web.onrender.com";
 var cloudSupabase = window.supabase ? window.supabase.createClient('https://ywigafhbswrovuhvnkty.supabase.co', 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ') : null;
 
 // ==========================================
-// 🌟 2. 核心：云端数据库引擎 (彻底替代 IndexedDB)
+// 🌟 2. 核心：云端数据库引擎 (具备身份自动愈合能力)
 // ==========================================
 var DB = {
     init: async function() {
         console.log("☁️ AI 导演云端数据库已连接！");
     },
+    
+    // 🌟 新增内部方法：智能获取用户ID，防丢失
+    _getUid: async function() {
+        let uid = localStorage.getItem('userId');
+        if (uid) return uid;
+        
+        // 如果本地没有，尝试通过 Supabase 的底层 Session 恢复
+        if (typeof cloudSupabase !== 'undefined' && cloudSupabase) {
+            const { data } = await cloudSupabase.auth.getSession();
+            if (data && data.session && data.session.user) {
+                const recoveredId = data.session.user.id;
+                localStorage.setItem('userId', recoveredId); // 重新存入本地
+                return recoveredId;
+            }
+        }
+        return null;
+    },
+
     get: async function(key) {
-        const userId = localStorage.getItem('userId');
-        if (!userId || !cloudSupabase) return null;
+        const userId = await this._getUid();
+        if (!userId || typeof cloudSupabase === 'undefined' || !cloudSupabase) return null;
         
         const { data, error } = await cloudSupabase
             .from('cloud_kv_store')
@@ -27,10 +45,11 @@ var DB = {
         if (error || !data) return null;
         return data.data_value;
     },
+
     set: async function(key, value) {
-        const userId = localStorage.getItem('userId');
-        if (!userId || !cloudSupabase) {
-            console.warn("⚠️ 拦截保存：用户未登录或数据库未连接");
+        const userId = await this._getUid();
+        if (!userId || typeof cloudSupabase === 'undefined' || !cloudSupabase) {
+            console.warn("⚠️ 拦截保存：用户未登录或身份令牌丢失");
             return;
         }
         
@@ -47,16 +66,15 @@ var DB = {
             console.log(`✅ [${key}] 成功同步至云端！`);
         }
     },
+
     remove: async function(key) {
-        const userId = localStorage.getItem('userId');
-        if (!userId || !cloudSupabase) return;
+        const userId = await this._getUid();
+        if (!userId || typeof cloudSupabase === 'undefined' || !cloudSupabase) return;
         await cloudSupabase.from('cloud_kv_store').delete().eq('user_id', userId).eq('data_key', key);
     }
 };
 
-// 确保全局都可以访问到云端的 DB
 window.DB = DB;
-
 // ==========================================
 // 🌟 3. 媒体云盘引擎 (处理图片/视频永久保存)
 // ==========================================
