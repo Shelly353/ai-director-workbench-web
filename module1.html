@@ -660,7 +660,7 @@
 
         function removeRefImg(e, cat, idx, imgIdx) { e.stopPropagation(); extractedData[cat][idx].refImages.splice(imgIdx, 1); saveCurrentState(); renderAssetsUI(); }
 
-        async function genAssetImage(cat, idx, type) {
+       async function genAssetImage(cat, idx, type) {
             const styleKey = document.getElementById('styleSelect').value;
             const selectedModel = document.getElementById('imageModelSelect').value;
             const inputEl = document.getElementById(`desc_asset_${cat}_${idx}_${type}`);
@@ -690,24 +690,43 @@
             try {
                 const res = await apiRequest('/api/image/create', { model: selectedModel, prompt: fullPrompt, images: inlineImgs, ratio: '16:9', size: "1920*1080", async_mode: true });
                 let b64 = "";
+                
                 if (res.taskId) {
                     while (true) {
                         await new Promise(r => setTimeout(r, 3500));
-                        const pollRes = await fetch(`https://proxy-server-web.onrender.com/api/dashscope/poll/${res.taskId}`);                 
+                        
+                        // 🌟 核心修复点：携带 Token
+                        let currentUrl = typeof API_BASE !== 'undefined' ? API_BASE : "https://proxy-server-web.onrender.com"; 
+                        const userToken = localStorage.getItem('userToken');
+
+                        const pollRes = await fetch(`${currentUrl}/api/dashscope/poll/${res.taskId}`, {
+                            method: 'GET',
+                            headers: { 'Authorization': `Bearer ${userToken}` } 
+                        });
+                        
+                        if (!pollRes.ok) throw new Error(`轮询被拒绝: HTTP ${pollRes.status}`);
+
                         const pollData = await pollRes.json();
                         const taskStatus = pollData.output?.task_status || pollData.task_status;
                         if (taskStatus === 'SUCCEEDED') { b64 = pollData.output.results[0].url; break; }
-                        else if (taskStatus === 'FAILED') throw new Error("生成失败");
+                        else if (taskStatus === 'FAILED') throw new Error("大模型生成失败");
                     }
-                } else if (res.data && res.data.length > 0) b64 = res.data[0].url;
+                } else if (res.data && res.data.length > 0) {
+                    b64 = res.data[0].url;
+                }
+
+                if(!b64) throw new Error("未获取到图片链接");
 
                 b64 = await window.uploadMediaToCloud(b64, 'png');
                 if (cat === 'scenes') { type === 'forward' ? extractedData.scenes[idx].forwardImg = b64 : extractedData.scenes[idx].reverseImg = b64; } 
                 else extractedData[cat][idx].img = b64;
+                
                 renderAssetsUI(); saveCurrentState();
-            } catch (e) { if (imgBox) imgBox.innerHTML = `<span style="color:red">失败</span>`; }
+            } catch (e) { 
+                log(`❌ 生图报错: ${e.message}`);
+                if (imgBox) imgBox.innerHTML = `<span style="color:red">失败: ${e.message}</span>`; 
+            }
         }
-
         function addAsset(cat) { if (cat === 'scenes') extractedData.scenes.push({ name: '新场景', description: '', forwardDesc: '', reverseDesc: '', forwardImg: null, reverseImg: null, refImages: [] }); else extractedData[cat].push({ name: '新项目', description: '', img: null, refImages: [] }); renderAssetsUI(); }
         function deleteAsset(cat, idx) { if (confirm(`确认删除？`)) { extractedData[cat].splice(idx, 1); renderAssetsUI(); } }
         function updateDataName(cat, idx, val) { extractedData[cat][idx].name = val; saveCurrentState(); }
