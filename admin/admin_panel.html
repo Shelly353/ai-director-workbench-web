@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>AI 导演 - 团队资源管理</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="../css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -29,15 +29,15 @@
         </div>
 
         <div class="tab-bar" id="projectTabs">
-            <button class="btn btn-primary" onclick="filterByProject('all')">全部项目</button>
+            <button class="btn btn-primary" id="tab_all" onclick="filterByProject('all')">全部项目</button>
         </div>
 
         <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card" style="height: 300px;">
                 <canvas id="usageChart"></canvas>
             </div>
-            <div class="stat-card">
-                <h4>消耗占比</h4>
+            <div class="stat-card" style="height: 300px;">
+                <h4 style="margin-top:0;">消耗占比</h4>
                 <canvas id="pieChart"></canvas>
             </div>
         </div>
@@ -47,7 +47,7 @@
                 <tr>
                     <th>时间</th>
                     <th>成员邮箱</th>
-                    <th>项目ID</th>
+                    <th>项目名称 / ID</th>
                     <th>操作类型</th>
                     <th>消耗积分</th>
                 </tr>
@@ -56,7 +56,7 @@
         </table>
     </div>
 
-    <script src="js/app.js"></script>
+    <script src="../js/app.js?v=9999"></script>
     <script>
         let allLogs = [];
         let myProjects = [];
@@ -64,26 +64,53 @@
         let pieInstance = null;
 
         window.onload = async () => {
-            const { data: { user } } = await supabaseClient.auth.getUser();
-            const { data } = await supabaseClient.rpc('get_admin_resource_stats', { target_email: user.email });
-            
-            allLogs = data.usage_list || [];
-            // 获取项目名称列表用于 Tab
-            const { data: projs } = await supabaseClient.rpc('get_my_projects', { my_email: user.email });
-            myProjects = projs;
+            // 🌟 修复 3：统一采用 window.cloudSupabase
+            if (!window.cloudSupabase) {
+                document.getElementById('statsBody').innerHTML = `<tr><td colspan="5" style="text-align:center; color:red;">❌ 数据库未连接，请检查 app.js 路径。</td></tr>`;
+                return;
+            }
 
-            renderTabs();
-            filterByProject('all');
+            try {
+                const { data: { user } } = await window.cloudSupabase.auth.getUser();
+                if (!user) {
+                    window.location.href = '../index.html';
+                    return;
+                }
+
+                // 获取资源统计数据 (增加错误拦截)
+                const { data: statsData, error: statsErr } = await window.cloudSupabase.rpc('get_admin_resource_stats', { target_email: user.email });
+                if (statsErr) throw statsErr;
+                
+                // 兼容 RPC 返回格式 (无论它返回的是对象还是数组)
+                allLogs = statsData ? (statsData.usage_list || (Array.isArray(statsData) ? statsData : [])) : [];
+
+                // 获取项目名称列表用于 Tab 和 表格名称映射
+                const { data: projs, error: projsErr } = await window.cloudSupabase.rpc('get_my_projects', { my_email: user.email });
+                if (projsErr) throw projsErr;
+                myProjects = projs || [];
+
+                renderTabs();
+                filterByProject('all');
+            } catch (e) {
+                console.error("加载数据异常:", e);
+                document.getElementById('statsBody').innerHTML = `<tr><td colspan="5" style="text-align:center; color:red;">加载数据失败：${e.message}</td></tr>`;
+            }
         };
 
         function renderTabs() {
             const bar = document.getElementById('projectTabs');
+            bar.innerHTML = `<button class="btn btn-primary" id="tab_all" onclick="filterByProject('all')">全部项目</button>`;
             myProjects.forEach(p => {
-                bar.innerHTML += `<button class="btn btn-outline" onclick="filterByProject('${p.id}')">${p.name}</button>`;
+                bar.innerHTML += `<button class="btn btn-outline" id="tab_${p.id}" onclick="filterByProject('${p.id}')">${p.name}</button>`;
             });
         }
 
         function filterByProject(projectId) {
+            // 按钮高亮切换逻辑
+            document.querySelectorAll('#projectTabs button').forEach(btn => btn.className = 'btn btn-outline');
+            const activeBtn = document.getElementById('tab_' + projectId);
+            if (activeBtn) activeBtn.className = 'btn btn-primary';
+
             const filtered = projectId === 'all' ? allLogs : allLogs.filter(l => l.project_id === projectId);
             renderTable(filtered);
             renderCharts(filtered);
@@ -91,43 +118,75 @@
 
         function renderTable(data) {
             const body = document.getElementById('statsBody');
-            body.innerHTML = data.map(l => `
+            if (data.length === 0) {
+                body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 40px; color: #86909c;">暂无团队消耗数据</td></tr>';
+                return;
+            }
+
+            body.innerHTML = data.map(l => {
+                // 🌟 升级：将冰冷的 project_id 翻译成直观的项目名称
+                const proj = myProjects.find(p => p.id === l.project_id);
+                const projName = proj ? proj.name : l.project_id;
+                
+                return `
                 <tr>
                     <td>${new Date(l.created_at).toLocaleString()}</td>
                     <td>${l.user_email}</td>
-                    <td>${l.project_id}</td>
+                    <td><span style="background:#f4f5f9; padding:2px 6px; border-radius:4px; font-size:12px;">${projName}</span></td>
                     <td>${l.action_type}</td>
-                    <td style="font-weight:bold; color:#ff4d4f;">-${l.credits_spent}</td>
+                    <td style="font-weight:bold; color:#ff4d4f;">-${l.credits_spent} 💎</td>
                 </tr>
-            `).join('');
+            `}).join('');
         }
 
         function renderCharts(data) {
             const ctx = document.getElementById('usageChart').getContext('2d');
             const pieCtx = document.getElementById('pieChart').getContext('2d');
 
-            // 聚合数据
+            if (data.length === 0) {
+                if(chartInstance) chartInstance.destroy();
+                if(pieInstance) pieInstance.destroy();
+                return;
+            }
+
+            // 1. 成员消耗柱状图
             const labels = [...new Set(data.map(l => l.user_email))];
-            const values = labels.map(u => data.filter(l => l.user_email === u).reduce((s, c) => s + c.credits_spent, 0));
+            const values = labels.map(u => data.filter(l => l.user_email === u).reduce((s, c) => s + (c.credits_spent || 0), 0));
 
             if(chartInstance) chartInstance.destroy();
             chartInstance = new Chart(ctx, {
                 type: 'bar',
-                data: { labels, datasets: [{ label: '成员积分消耗', data: values, backgroundColor: '#1677ff' }] }
+                data: { labels, datasets: [{ label: '成员消耗总计 (💎)', data: values, backgroundColor: '#1677ff', borderRadius: 4 }] },
+                options: { responsive: true, maintainAspectRatio: false }
             });
 
+            // 2. 行为动作饼图
             const actionTypes = [...new Set(data.map(l => l.action_type))];
-            const actionValues = actionTypes.map(a => data.filter(l => l.action_type === a).reduce((s, c) => s + c.credits_spent, 0));
+            const actionValues = actionTypes.map(a => data.filter(l => l.action_type === a).reduce((s, c) => s + (c.credits_spent || 0), 0));
 
             if(pieInstance) pieInstance.destroy();
             pieInstance = new Chart(pieCtx, {
                 type: 'doughnut',
-                data: { labels: actionTypes, datasets: [{ data: actionValues, backgroundColor: ['#ff4d4f', '#722ed1', '#13c2c2', '#faad14'] }] }
+                data: { labels: actionTypes, datasets: [{ data: actionValues, backgroundColor: ['#ff4d4f', '#722ed1', '#13c2c2', '#faad14', '#52c41a', '#eb2f96'] }] },
+                options: { responsive: true, maintainAspectRatio: false }
             });
         }
 
         function exportToExcel() {
-            const ws = XLSX.utils.json_to_sheet(allLogs);
+            if (allLogs.length === 0) return alert("没有可以导出的数据");
+            
+            // 格式化导出的字段，使 Excel 更加易读
+            const exportData = allLogs.map(l => {
+                const proj = myProjects.find(p => p.id === l.project_id);
+                return {
+                    "记录时间": new Date(l.created_at).toLocaleString(),
+                    "操作账号": l.user_email,
+                    "项目名称": proj ? proj.name : l.project_id,
+                    "操作类型": l.action_type,
+                    "消耗积分": l.credits_spent
+                };
+            });
+            const ws = XLSX.utils.json_to_sheet(exportData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "资源消耗日志");
             XLSX.writeFile(wb, "AI导演团队消耗报表.xlsx");
