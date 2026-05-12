@@ -656,7 +656,7 @@
         function removeRefImg(e, cat, idx, imgIdx) { e.stopPropagation(); extractedData[cat][idx].refImages.splice(imgIdx, 1); saveCurrentState(); renderAssetsUI(); }
 
         // ==========================================
-        // 🌟 终极三重护盾轮询系统 (绝不 401，绝不解析报错)
+        // 🌟 终极修复：使用原版、不带 Auth Headers 的裸请求轮询
         // ==========================================
         async function genAssetImage(cat, idx, type) {
             const styleKey = document.getElementById('styleSelect').value;
@@ -678,7 +678,6 @@
                 });
             }
 
-            // 完美复刻旧版的 AI_PROMPTS 提取逻辑
             let tmplKey = (cat === 'scenes' && type === 'reverse') ? 'scenes_reverse' : cat;
             const template = window.AI_PROMPTS && window.AI_PROMPTS[tmplKey] ? window.AI_PROMPTS[tmplKey] : {};
 
@@ -711,7 +710,7 @@
                     model: selectedModel, 
                     prompt: fullPrompt, 
                     images: inlineImgs, 
-                    ratio: ratioVal || template.ratio || '16:9', 
+                    ratio: ratioVal || template.ratio, 
                     size: sizeVal,
                     async_mode: true
                 });
@@ -724,74 +723,45 @@
                     
                     while (true) {
                         await new Promise(resolve => setTimeout(resolve, 3500));
+                        
+                        // 🌟 纯净裸请求：不带任何引发跨域的自定义 Header
                         const renderBaseURL = "https://proxy-server-web.onrender.com"; 
+                        const pollRes = await fetch(`${renderBaseURL}/api/dashscope/poll/${res.taskId}`);
+                        
+                        if (!pollRes.ok) throw new Error(`轮询被拒绝 HTTP ${pollRes.status}`);
 
-                        let pollData = null;
-
-                        // 🛡️ 三重护盾轮询，绝对穿透 401 拦截
-                        try {
-                            // 护盾 1：优先尝试系统自带的 apiRequest 封装 (自动处理项目级验证)
-                            pollData = await apiRequest(`/api/dashscope/poll/${res.taskId}`, { action: "poll" });
-                        } catch (err1) {
-                            try {
-                                // 护盾 2：如果 apiRequest 报不支持的请求体，退回旧版无头 GET 裸请求
-                                const pollRes = await fetch(`${renderBaseURL}/api/dashscope/poll/${res.taskId}`);
-                                if (!pollRes.ok) throw new Error(pollRes.status);
-                                pollData = await pollRes.json();
-                            } catch (err2) {
-                                // 护盾 3：如果无头请求被代理服务器以 401 拒绝，强行注入本地可能的所有 Token
-                                const headers = {};
-                                if (localStorage.getItem('userToken')) headers['Authorization'] = `Bearer ${localStorage.getItem('userToken')}`;
-                                if (localStorage.getItem('temp_access_code')) headers['x-access-code'] = localStorage.getItem('temp_access_code');
-                                
-                                const finalRes = await fetch(`${renderBaseURL}/api/dashscope/poll/${res.taskId}`, { method: 'GET', headers });
-                                if (!finalRes.ok) throw new Error(`轮询彻底失败 HTTP ${finalRes.status}`);
-                                pollData = await finalRes.json();
-                            }
-                        }
-
-                        if (!pollData) throw new Error("无法从代理服务器获取轮询数据");
-
+                        const pollData = await pollRes.json();
                         const taskStatus = pollData.output?.task_status || pollData.task_status;
                         
                         if (taskStatus === 'SUCCEEDED') {
-                            const out = pollData.output || pollData;
+                            const out = pollData.output || {};
                             
-                            if (out.results && Array.isArray(out.results) && out.results.length > 0) {
+                            if (out.results && out.results.length > 0) {
                                 b64 = out.results[0].url || out.results[0].image_url;
+                            } else if (out.choices && out.choices[0]?.message?.content) {
+                                const content = out.choices[0].message.content;
+                                const imgItem = Array.isArray(content) ? content.find(c => c.image || c.url) : null;
+                                if (imgItem) b64 = imgItem.image || imgItem.url;
+                                else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
                             } else if (out.image_url) {
                                 b64 = out.image_url;
                             } else if (out.image) {
                                 b64 = out.image;
-                            } else if (out.url) {
-                                b64 = out.url;
-                            } else if (out.choices && Array.isArray(out.choices) && out.choices.length > 0) {
-                                const content = out.choices[0]?.message?.content;
-                                if (Array.isArray(content)) {
-                                    const imgItem = content.find(c => c.image || c.url);
-                                    if (imgItem) b64 = imgItem.image || imgItem.url;
-                                } else if (typeof content === 'string' && content.startsWith('http')) {
-                                    b64 = content;
-                                }
                             }
                             
-                            if (!b64) {
-                                console.error("解析图片数据失败:", pollData);
-                                throw new Error("云端已完成，但未能提取出有效的图片链接");
-                            }
-                            
-                            log(`✅ 大模型绘制完成！`);
+                            if (!b64) throw new Error("提取图片链接失败");
+                            log(`✅ 阿里云生图完成！`);
                             break;
                         } else if (taskStatus === 'FAILED') {
-                            throw new Error(`生成失败: ${pollData.output?.message || pollData.message || "模型拒绝了请求"}`);
+                            throw new Error(`生成失败: ${pollData.output?.message || pollData.message}`);
                         } else {
                             log(`⏳ 云端排队绘制中: ${taskStatus}...`);
                         }
                     }
-                } else if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+                } else if (res.data && res.data.length > 0) {
                     b64 = res.data[0].url;
                 } else {
-                    throw new Error("云端返回数据格式异常");
+                    throw new Error("返回数据异常");
                 }
 
                 if (b64.startsWith('http')) {
@@ -800,13 +770,10 @@
                         const blob = await imgRes.blob();
                         b64 = await new Promise(r => { const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob); });
                     } catch (corsErr) {
-                        log(`⚠️ 触发跨域保护，正通过后端代理跨域下载...`);
+                        log(`⚠️ 触发跨域保护，正通过代理下载...`);
                         const proxyRes = await apiRequest('/api/proxy-image', { url: b64 });
-                        if (proxyRes.base64) {
-                            b64 = proxyRes.base64;
-                        } else {
-                            throw new Error("后端代理下载图片失败");
-                        }
+                        if (proxyRes.base64) b64 = proxyRes.base64;
+                        else throw new Error("后端代理下载图片失败");
                     }
                 }
 
