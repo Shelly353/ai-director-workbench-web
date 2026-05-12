@@ -655,103 +655,151 @@
         function removeRefImg(e, cat, idx, imgIdx) { e.stopPropagation(); extractedData[cat][idx].refImages.splice(imgIdx, 1); saveCurrentState(); renderAssetsUI(); }
 
         // ==========================================
-        // 🌟 终极免疫解析器：无论 API 如何畸形，永远不会崩溃
+        // 🌟 终极免疫解析器：完美还原旧版生图与轮询引擎
         // ==========================================
         async function genAssetImage(cat, idx, type) {
             const styleKey = document.getElementById('styleSelect').value;
             const selectedModel = document.getElementById('imageModelSelect').value;
-            const inputEl = document.getElementById(`desc_asset_${cat}_${idx}_${type}`);
-            const imgBox = document.getElementById(`imgBox_asset_${cat}_${idx}_${type}`);
+            const ratioVal = document.getElementById('ratioSelect').value;
+            const divId = `asset_${cat}_${idx}_${type}`;
+            const inputEl = document.getElementById(`desc_${divId}`);
+            const imgBox = document.getElementById(`imgBox_${divId}`);
 
             let stylePrefix = (styleKey && STYLE_MODIFIERS[styleKey]) ? (STYLE_MODIFIERS[styleKey][cat === 'scenes_reverse' ? 'scenes' : cat] || "") : "";
-            
-            let rawText = ""; let inlineImgs = [];
+
+            let rawText = "";
+            let inlineImgs = [];
             if (inputEl) {
                 inputEl.childNodes.forEach(node => {
                     if (node.nodeType === Node.TEXT_NODE) rawText += node.textContent;
-                    else if (node.nodeType === Node.ELEMENT_NODE) {
-                        if (node.classList.contains('inline-pill')) {
-                            inlineImgs.push(node.getAttribute('data-b64'));
-                            rawText += ` [参考图${inlineImgs.length}: ${node.innerText}] `;
-                        } else { rawText += node.innerText; }
-                    }
+                    else if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('inline-pill')) inlineImgs.push(node.getAttribute('data-b64'));
+                    else if (node.nodeType === Node.ELEMENT_NODE) rawText += node.innerText;
                 });
             }
-            
-            const sysInject = inlineImgs.length > 0 ? "【系统指令：请识别提示词中的参考图标识，提取特征融入画面】" : "";
-            const fullPrompt = `${stylePrefix}${sysInject}${rawText}`;
 
+            let tmplKey = (cat === 'scenes' && type === 'reverse') ? 'scenes_reverse' : cat;
+            const template = window.AI_PROMPTS[tmplKey];
+
+            if (cat === 'scenes' && type === 'reverse' && extractedData.scenes[idx].forwardImg) inlineImgs = [extractedData.scenes[idx].forwardImg];
+
+            const fullPrompt = `${stylePrefix}${template.prefix || ""}${rawText}${template.suffix || ""}`;
+            
             if (!(await checkAndDeductCredits('gen_image', selectedModel))) return;
-            if (imgBox) imgBox.innerHTML = `<span>🎨 正在提交生图任务...</span>`;
+
+            log(`📝 提交生图指令: ${fullPrompt}`);
+            if (imgBox) imgBox.innerHTML = `<span>🎨 正在生图...</span>`;
+
+            let sizeVal = template.size || "1920*1080"; 
+            if (selectedModel.includes('doubao')) {
+                if (ratioVal === "9:16" || template.ratio === "9:16") sizeVal = "1440*2560";
+                else if (ratioVal === "1:1" || template.ratio === "1:1") sizeVal = "2048*2048";
+                else if (ratioVal === "21:9" || template.ratio === "21:9") sizeVal = "3440*1440";
+                else if (ratioVal === "4:3" || template.ratio === "4:3") sizeVal = "2304*1728";
+                else sizeVal = "2560*1440"; 
+            } else {
+                if (ratioVal === "9:16" || template.ratio === "9:16") sizeVal = "720*1280";
+                else if (ratioVal === "1:1" || template.ratio === "1:1") sizeVal = "1024*1024";
+                else if (ratioVal === "21:9" || template.ratio === "21:9") sizeVal = "1280*548";
+                else if (ratioVal === "4:3" || template.ratio === "4:3") sizeVal = "1024*768";
+                else sizeVal = "1920*1080"; 
+            }
 
             try {
-                const res = await apiRequest('/api/image/create', { model: selectedModel, prompt: fullPrompt, images: inlineImgs, ratio: '16:9', size: "1920*1080", async_mode: true });
+                const res = await apiRequest('/api/image/create', { 
+                    model: selectedModel, 
+                    prompt: fullPrompt, 
+                    images: inlineImgs, 
+                    ratio: ratioVal || template.ratio, 
+                    size: sizeVal,
+                    async_mode: true
+                });
+
                 let b64 = "";
-                
+
                 if (res.taskId) {
-                    if (imgBox) imgBox.innerHTML = `<span>⏳ 排队中 (ID:${res.taskId.substring(0,4)}...)</span>`;
+                    log(`✅ 成功提交排队，获取小票 TaskID: ${res.taskId}`);
+                    if (imgBox) imgBox.innerHTML = `<span>⏳ 云端绘制中...</span>`;
                     
                     while (true) {
-                        await new Promise(r => setTimeout(r, 3500));
-                        
-                        // 🌟 回退到最稳妥的旧版“无头请求”，避免 401 预检拦截
-                        let currentUrl = typeof API_BASE !== 'undefined' ? API_BASE : "https://proxy-server-web.onrender.com"; 
-                        const pollRes = await fetch(`${currentUrl}/api/dashscope/poll/${res.taskId}`);
-                        
-                        if (!pollRes.ok) throw new Error(`轮询被拒绝 HTTP ${pollRes.status}`);
+                        await new Promise(resolve => setTimeout(resolve, 3500));
+                        const renderBaseURL = "https://proxy-server-web.onrender.com"; 
 
+                        const pollRes = await fetch(`${renderBaseURL}/api/dashscope/poll/${res.taskId}`, {
+                            method: 'GET',
+                        });                 
+                        if (!pollRes.ok) throw new Error(`轮询请求失败 HTTP ${pollRes.status}`);
                         const pollData = await pollRes.json();
                         const taskStatus = pollData.output?.task_status || pollData.task_status;
                         
-                        if (taskStatus === 'SUCCEEDED') { 
-                            // 🛡️ 钢板防御：兼容各种厂商（阿里/字节/Google）错乱的返回值结构
-                            const out = pollData.output || pollData;
+                        if (taskStatus === 'SUCCEEDED') {
+                            const out = pollData.output || {};
                             
-                            if (out.results && Array.isArray(out.results) && out.results.length > 0) {
+                            if (out.results && out.results.length > 0) {
                                 b64 = out.results[0].url || out.results[0].image_url;
-                            } else if (out.image_url) {
+                            } 
+                            else if (out.choices && out.choices[0]?.message?.content) {
+                                const content = out.choices[0].message.content;
+                                const imgItem = Array.isArray(content) ? content.find(c => c.image || c.url) : null;
+                                if (imgItem) b64 = imgItem.image || imgItem.url;
+                                else if (typeof content === 'string' && content.startsWith('http')) b64 = content;
+                            } 
+                            else if (out.image_url) {
                                 b64 = out.image_url;
                             } else if (out.image) {
                                 b64 = out.image;
-                            } else if (out.url) {
-                                b64 = out.url;
-                            } else if (out.choices && Array.isArray(out.choices) && out.choices.length > 0) {
-                                const content = out.choices[0]?.message?.content;
-                                if (Array.isArray(content)) {
-                                    const imgItem = content.find(c => c.image || c.url);
-                                    if (imgItem) b64 = imgItem.image || imgItem.url;
-                                } else if (typeof content === 'string' && content.startsWith('http')) {
-                                    b64 = content;
-                                }
                             }
-
-                            // 如果找了一圈还是没找到 URL，说明模型内部被拦截或出错，强行报错打断，不再去读 [0]！
+                            
                             if (!b64) {
-                                console.error("API返回了成功，但无法解析出图片链接字段:", pollData);
-                                throw new Error("生图已完成，但未能在响应中找到有效的图片链接。");
+                                console.error("无法解析完整的云端返回数据:", pollData);
+                                throw new Error("云端已完成，但提取图片链接失败（请按 F12 查看控制台详细数据）");
                             }
-                            break; 
+                            
+                            log(`✅ 阿里云生图完成！`);
+                            break;
                         } else if (taskStatus === 'FAILED') {
-                            throw new Error(pollData.output?.message || pollData.message || "大模型生图失败");
+                            throw new Error(`生成失败: ${pollData.output?.message || pollData.message}`);
+                        } else {
+                            log(`⏳ 云端排队绘制中: ${taskStatus}...`);
                         }
                     }
-                } else if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+                } else if (res.data && res.data.length > 0) {
                     b64 = res.data[0].url;
+                } else {
+                    throw new Error("返回数据异常");
                 }
 
-                if(!b64) throw new Error("未从服务器获取到图片链接");
+                if (b64.startsWith('http')) {
+                    try {
+                        const imgRes = await fetch(b64);
+                        const blob = await imgRes.blob();
+                        b64 = await new Promise(r => { const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob); });
+                    } catch (corsErr) {
+                        log(`⚠️ 触发跨域保护，正通过代理下载...`);
+                        const proxyRes = await apiRequest('/api/proxy-image', { url: b64 });
+                        if (proxyRes.base64) {
+                            b64 = proxyRes.base64;
+                        } else {
+                            throw new Error("后端代理下载图片失败");
+                        }
+                    }
+                }
 
                 if (imgBox) imgBox.innerHTML = `<span>☁️ 正在保存至云端...</span>`;
                 b64 = await window.uploadMediaToCloud(b64, 'png');
+                if (cat === 'scenes') {
+                    if (type === 'forward') extractedData.scenes[idx].forwardImg = b64; 
+                    else extractedData.scenes[idx].reverseImg = b64; 
+                } else { 
+                    extractedData[cat][idx].img = b64; 
+                }
                 
-                if (cat === 'scenes') { type === 'forward' ? extractedData.scenes[idx].forwardImg = b64 : extractedData.scenes[idx].reverseImg = b64; } 
-                else extractedData[cat][idx].img = b64;
-                
-                renderAssetsUI(); saveCurrentState();
+                renderAssetsUI(); 
+                saveCurrentState();
+                log(`✅ [${extractedData[cat][idx].name}] 图片生成及保存成功！`);
+
             } catch (e) { 
-                console.error("生图报错:", e);
-                log(`❌ 生图失败: ${e.message}`);
-                if (imgBox) imgBox.innerHTML = `<span style="color:red; font-size: 11px;">失败: ${e.message}</span>`; 
+                if (imgBox) imgBox.innerHTML = `<span style="color:red">生成失败</span>`; 
+                log(`❌ 生图异常: ${e.message}`); 
             }
         }
 
