@@ -73,6 +73,26 @@
 
     <script src="js/app.js?v=7000"></script>
     <script>
+
+// 统一打开全新的独立收银台页面
+window.showRechargeModal = function() {
+    // 自动判定当前路径级别，确保能正确找到 html/recharge.html
+    const path = window.location.pathname;
+    let targetUrl = 'html/recharge.html';
+    if (path.includes('/html/')) {
+        targetUrl = 'recharge.html';
+    }
+    
+    // 弹出一个居中、大小固定的独立收银台窗口
+    const width = 450;
+    const height = 650;
+    const left = (window.screen.width / 2) - (width / 2);
+    const top = (window.screen.height / 2) - (height / 2);
+    
+    window.open(targetUrl, 'AI充值收银台', `width=${width},height=${height},top=${top},left=${left},toolbar=no,menubar=no,scrollbars=no,resizable=no`);
+};
+
+
         // 🌟 修复：防止 WORKSPACE_KEYS 重复声明导致的崩溃
         if (typeof WORKSPACE_KEYS === 'undefined') {
             var WORKSPACE_KEYS = ['scriptText', 'scriptSummary', 'storyboardData', 'extractedData', 'globalRatio', 'llmModelSelect', 'llm_config', 'charactersData'];
