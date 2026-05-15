@@ -171,6 +171,15 @@
         const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+        // 统一收银台弹出函数
+        window.showRechargeModal = function() {
+            const targetUrl = 'recharge.html';
+            const width = 450; const height = 650;
+            const left = (window.screen.width / 2) - (width / 2);
+            const top = (window.screen.height / 2) - (height / 2);
+            window.open(targetUrl, 'AI_Recharge', `width=${width},height=${height},top=${top},left=${left},toolbar=no,menubar=no,scrollbars=no,resizable=no`);
+        };
+
         async function fetchCredits() {
             const userId = localStorage.getItem('userId');
             if (!userId) return;
@@ -195,7 +204,7 @@
             return true;
         }
 
-        // 🌟 核心：物料追踪埋点
+        // 物料追踪埋点
         async function logProduction(assetName, mediaType, sourceType, cost, modelName) {
             try {
                 let pid = 'unknown_project';
@@ -233,6 +242,16 @@
 
         function toggleConsole() { const wrapper = document.getElementById('consoleWrapper'); wrapper.classList.toggle('open'); document.getElementById('consoleToggleIcon').innerText = wrapper.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开'; }
         function log(msg) { const consoleEl = document.getElementById('logConsole'); if (consoleEl) { const time = new Date().toLocaleTimeString(); consoleEl.innerText += `[${time}] ${msg}\n`; consoleEl.scrollTop = consoleEl.scrollHeight; } }
+
+        // 🌟 修复遗失的 toggleDetails 展开收起功能
+        function toggleDetails(rowId, forceCollapse = null) {
+            const el = document.getElementById(`details_${rowId}`);
+            const icon = document.getElementById(`toggle_icon_${rowId}`);
+            if (!el) return;
+            const shouldHide = forceCollapse !== null ? forceCollapse : (el.style.display !== 'none');
+            el.style.display = shouldHide ? 'none' : 'block';
+            icon.innerText = shouldHide ? '▶' : '▼';
+        }
 
         async function updateVideoDuration(rowId, val) { const row = storyboardData.find(x => x.id == rowId); if (row) { row.duration = parseInt(val); await DB.set('storyboardData', storyboardData); } }
         async function updatePromptText(rowId) {
@@ -317,7 +336,7 @@
             }
         }
 
-        // 🌟 核心：兼容 Seedance 1.5 和 2.0 的生产引擎
+        // 🌟 核心升级：Seedance 1.5 和 2.0 兼容引擎，带精准的防 400 保护
         async function executeVideoTask(task) {
             const { rowId, prompt, duration, images } = task;
             const vGrid = document.getElementById(`vrow_videos_${rowId}`);
@@ -327,11 +346,10 @@
             
             if (!(await checkAndDeductCredits('gen_video', selectedModel))) return;
             
-            // 埋点记录
             logProduction(`分镜 ${rowId} 视频`, "视频", "AI生成", 5, selectedModel);
 
             const uiId = 'vbox_' + Date.now();
-            vGrid.insertAdjacentHTML('beforeend', `<div class="video-thumb" id="${uiId}"><div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px;"><span style="color:var(--primary); font-size:12px; font-weight:bold;">🚀 启动中...</span></div></div>`);
+            vGrid.insertAdjacentHTML('beforeend', `<div class="video-thumb" id="${uiId}"><div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px; text-align:center;"><span style="color:var(--primary); font-size:12px; font-weight:bold;">🚀 启动中...</span></div></div>`);
 
             try {
                 let processedImages = [];
@@ -342,7 +360,7 @@
                 let endpoint = '/api/dashscope/create';
                 let reqBody = { model: selectedModel, input: { prompt: prompt }, parameters: { ratio: globalRat, duration: parseInt(duration), resolution: globalRes } };
 
-                // 🌟 火山引擎 (Seedance 1.5/2.0) 特殊分支
+                // 🌋 火山引擎分支处理
                 if (selectedModel.includes('doubao-seedance')) {
                     endpoint = '/api/volcengine/create';
                     let doubaoContent = [{ type: "text", text: prompt }];
@@ -350,39 +368,56 @@
                     if (processedImages.length > 0) {
                         processedImages.forEach(url => {
                             let imgObj = { type: "image_url", image_url: { url: url } };
-                            // Seedance 2.0 要求显式声明 role
-                            if (selectedModel === 'doubao-seedance-2-0-260128') imgObj.role = "reference_image";
+                            // Seedance 2.0 必须带上 role 声明
+                            if (selectedModel.includes('2-0')) imgObj.role = "reference_image";
                             doubaoContent.push(imgObj);
                         });
                     }
-                    reqBody = { model: selectedModel, content: doubaoContent };
+
+             // 🚨 修正时长限制：支持官方的 4~15 秒自由生成
+                    let safeDuration = parseInt(duration);
+                    if (safeDuration < 4) safeDuration = 4;
+                    if (safeDuration > 15) safeDuration = 15;
+
+                    reqBody = { 
+                        model: selectedModel, 
+                        content: doubaoContent,
+                        ratio: globalRat,
+                        duration: safeDuration 
+                    };
                     
-                    // 🌟 Seedance 2.0 参数扁平化处理
-                    if (selectedModel === 'doubao-seedance-2-0-260128') {
-                        reqBody.ratio = globalRat;
-                        reqBody.duration = parseInt(duration);
-                        reqBody.generate_audio = true; // 开启原生音效
+                    if (selectedModel.includes('2-0')) {
+                        reqBody.generate_audio = true; // 2.0 开启原生音效
                         reqBody.watermark = false;
                     }
                 } else if (selectedModel === 'happyhorse-1.0-r2v' && processedImages.length > 0) {
                     reqBody.input.media = processedImages.map(url => ({ type: "reference_image", url: url }));
                 }
 
-                const baseURL = 'https://proxy-server-web.onrender.com';
+                // 为了防止跨域及保证支付链路，必须调用本地 server.js
+                const baseURL = typeof API_BASE !== 'undefined' ? API_BASE : 'https://proxy-server-web.onrender.com';
                 const userToken = localStorage.getItem('userToken');
+                
                 const res = await fetch(baseURL + endpoint, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
                     body: JSON.stringify(reqBody)
                 });
                 
+                // 🌟 增强错误捕获：直接打印 400 背后的真实原因
                 const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error?.message || data.message || `API 拒绝请求 (HTTP ${res.status})`);
+                }
+
                 const taskId = (data.output && data.output.task_id) ? data.output.task_id : (data.task_id || data.id);
-                if(!taskId) throw new Error(data.message || "未返回任务ID");
+                if(!taskId) throw new Error("API未返回任务ID");
                 
                 await pollVideoTask(taskId, uiId, rowId, duration, selectedModel);
                 
             } catch (e) {
-                document.getElementById(uiId).innerHTML = `<div style="text-align:center; color:red; font-size:10px;">失败: ${e.message}</div>`;
+                log(`❌ 镜头 ${rowId} 失败: ${e.message}`);
+                document.getElementById(uiId).innerHTML = `<div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px; text-align:center;"><span style="color:#f53f3f; font-size:11px; font-weight:bold;">❌ 失败</span><span style="font-size:9px; color:#888; margin-top:5px; word-break:break-all;">${e.message}</span><button onclick="this.parentElement.parentElement.remove()" style="margin-top:8px; font-size:10px; padding:2px 6px;">清除</button></div>`;
             }
         }
 
@@ -391,7 +426,7 @@
                 videoTimers[taskId] = setInterval(async () => {
                     try {
                         const pollUrl = selectedModel.includes('doubao-seedance') ? `/api/volcengine/poll/${taskId}` : `/api/dashscope/poll/${taskId}`;
-                        const baseURL = 'https://proxy-server-web.onrender.com';
+                        const baseURL = typeof API_BASE !== 'undefined' ? API_BASE : 'https://proxy-server-web.onrender.com';
                         const res = await fetch(baseURL + pollUrl, { headers: { 'Authorization': `Bearer ${localStorage.getItem('userToken')}` } });
                         const data = await res.json();
 
@@ -411,8 +446,11 @@
                             }
                             document.getElementById(uiId).innerHTML = `<video src="${url}#t=0.001" loop muted></video><div class="status-badge">✅ ${duration}s</div><div class="play-icon">▶</div><div style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:10;" onclick="openVideoModal('${uiId}', '${url}', '${rowId}')"></div>`;
                             resolve();
-                        } else if (upperStatus === 'FAILED') { throw new Error("生成失败"); }
-                    } catch (e) { clearInterval(videoTimers[taskId]); resolve(); }
+                        } else if (upperStatus === 'FAILED') { throw new Error(data.error?.message || data.output?.message || "云端渲染失败"); }
+                    } catch (e) { 
+                        if(e.message) log(`❌ 轮询异常: ${e.message}`);
+                        clearInterval(videoTimers[taskId]); resolve(); 
+                    }
                 }, 5000);
             });
         }
