@@ -383,14 +383,20 @@
                     if (safeDuration < 4) safeDuration = 4;
                     if (safeDuration > 15) safeDuration = 15;
 
-                    let safeRatio = globalRat;
+                   let safeRatio = globalRat;
                     if (safeRatio === '21:9') safeRatio = '16:9'; 
 
+                    // 🚨 修复：将前端选择的分辨率传给火山引擎
+                    let safeRes = globalRes;
+                    // 注：火山 Seedance 官方长视频最低物理支持就是 720P。
+                    // 传 480P 时，它会作为“极速生成”意图处理，但最终文件依然可能被系统拉升为 720P 尺寸以保证画面不断崖式崩坏。
+                    
                     reqBody = { 
                         model: selectedModel, 
                         content: doubaoContent,
                         ratio: safeRatio,
-                        duration: safeDuration 
+                        duration: safeDuration,
+                        resolution: safeRes  // 👈 补上这个缺失的参数
                     };
                     
                     if (selectedModel.includes('2-0')) {
@@ -465,6 +471,44 @@
         function closeVideoModal() { document.getElementById('videoModal').style.display = 'none'; document.getElementById('modalVideoPlayer').src = ''; }
         function logout() { localStorage.clear(); location.href = '../index.html'; }
         function saveAndGoTo(url) { location.href = url; }
+        // 🌟 新增：下载与删除视频功能
+        async function downloadModalVideo() {
+            if (!currentVideoTarget.url) return;
+            try {
+                // 使用 fetch 获取视频并触发强制下载，避免浏览器直接打开新标签页播放
+                const response = await fetch(currentVideoTarget.url);
+                const blob = await response.blob();
+                const blobUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = blobUrl;
+                a.download = `AI_Director_Video_${Date.now()}.mp4`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(blobUrl);
+                document.body.removeChild(a);
+            } catch (e) {
+                alert("直接下载失败，请尝试右键点击视频选择【视频另存为...】");
+            }
+        }
+
+        async function deleteModalVideo() {
+            if (!currentVideoTarget.rowId || !currentVideoTarget.uiId) return;
+            if (!confirm('🗑️ 确定要彻底删除这个视频版本吗？此操作不可恢复。')) return;
+            
+            // 1. 从界面 DOM 中移除
+            const domEl = document.getElementById(currentVideoTarget.uiId);
+            if (domEl) domEl.remove();
+            
+            // 2. 从本地存储数据库中清理
+            const row = storyboardData.find(x => x.id == currentVideoTarget.rowId);
+            if (row && row.videos) {
+                row.videos = row.videos.filter(v => v.url !== currentVideoTarget.url);
+                await DB.set('storyboardData', storyboardData);
+            }
+            
+            closeVideoModal();
+        }
     </script>
 </body>
 </html>
