@@ -365,14 +365,17 @@
                     endpoint = '/api/volcengine/create';
                     let doubaoContent = [{ type: "text", text: prompt }];
                     
-                    if (processedImages.length > 0) {
+                   if (processedImages.length > 0) {
                         processedImages.forEach(url => {
-                            // Seedance 要求所有图片强制加上 role 属性，否则可能 400
-                            doubaoContent.push({ 
-                                type: "image_url", 
-                                image_url: { url: url },
-                                role: "reference_image" 
-                            });
+                            let imgObj = { type: "image_url", image_url: { url: url } };
+                            
+                            // 🚨 核心修复：只有 2.0 认识 r2v 模式，必须加 role
+                            // 1.5 是老架构，加上 role 反而会直接报 400 崩溃！
+                            if (selectedModel.includes('2-0')) {
+                                imgObj.role = "reference_image";
+                            }
+                            
+                            doubaoContent.push(imgObj);
                         });
                     }
 
