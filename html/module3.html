@@ -96,7 +96,7 @@
         <label>🎬 模型:</label>
         <select id="videoModelSelect">
             <option value="happyhorse-1.0-r2v">Happy Horse (支持图1/图2控制)</option>
-            <option value="doubao-seedance-2-0-260128">Seedance 2.0 (原生音效/多图参考)</option>
+            <option value="doubao-seedance-2-0-260128">Seedance 2.0 (支持原生音频/多图参考)</option>
             <option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</option>
             <option value="wan2.7-r2v">Wan 2.7 (强力动态)</option>
         </select>
@@ -243,7 +243,7 @@
         function toggleConsole() { const wrapper = document.getElementById('consoleWrapper'); wrapper.classList.toggle('open'); document.getElementById('consoleToggleIcon').innerText = wrapper.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开'; }
         function log(msg) { const consoleEl = document.getElementById('logConsole'); if (consoleEl) { const time = new Date().toLocaleTimeString(); consoleEl.innerText += `[${time}] ${msg}\n`; consoleEl.scrollTop = consoleEl.scrollHeight; } }
 
-        // 🌟 修复遗失的 toggleDetails 展开收起功能
+        // 🌟 选项卡折叠控制引擎
         function toggleDetails(rowId, forceCollapse = null) {
             const el = document.getElementById(`details_${rowId}`);
             const icon = document.getElementById(`toggle_icon_${rowId}`);
@@ -254,6 +254,7 @@
         }
 
         async function updateVideoDuration(rowId, val) { const row = storyboardData.find(x => x.id == rowId); if (row) { row.duration = parseInt(val); await DB.set('storyboardData', storyboardData); } }
+        
         async function updatePromptText(rowId) {
             const row = storyboardData.find(x => x.id == rowId);
             const richEl = document.getElementById(`prompt_${rowId}`);
@@ -310,17 +311,25 @@
             }).join('');
         }
 
-        async function generateSingleVideo(rowId) {
+        // 🌟 生成单个视频
+        async function generateSingleVideo(rowId, isRedo = false) {
             await updatePromptText(rowId);
             const row = storyboardData.find(x => x.id == rowId);
             if (!row) return;
+
+            // 🌟 核心：触发生成后，自动折叠选项卡，保持界面整洁
+            toggleDetails(rowId, true);
+
             executeVideoTask({ rowId: row.id, prompt: row.text, duration: row.duration || 5, images: row.images || [] });
         }
 
+        // 🌟 批量生成视频
         async function startBatchGeneration() {
             videoQueue = [];
             for (let row of storyboardData) {
                 await updatePromptText(row.id);
+                // 🌟 核心：触发批量生成后，自动折叠所有选项卡
+                toggleDetails(row.id, true); 
                 videoQueue.push({ rowId: row.id, prompt: row.text, duration: row.duration || 5, images: row.images });
             }
             processQueue();
@@ -336,7 +345,7 @@
             }
         }
 
-        // 🌟 核心升级：Seedance 1.5 和 2.0 兼容引擎，带精准的防 400 保护
+        // 🌟 核心升级：包含 2.0 原生音频 + 多图支持 + 防 400 保护
         async function executeVideoTask(task) {
             const { rowId, prompt, duration, images } = task;
             const vGrid = document.getElementById(`vrow_videos_${rowId}`);
@@ -349,6 +358,9 @@
             logProduction(`分镜 ${rowId} 视频`, "视频", "AI生成", 5, selectedModel);
 
             const uiId = 'vbox_' + Date.now();
+            // 在点击的瞬间移除占位符文本
+            const placeholder = vGrid.querySelector('.placeholder-text'); if (placeholder) placeholder.remove();
+
             vGrid.insertAdjacentHTML('beforeend', `<div class="video-thumb" id="${uiId}"><div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px; text-align:center;"><span style="color:var(--primary); font-size:12px; font-weight:bold;">🚀 启动中...</span></div></div>`);
 
             try {
@@ -362,39 +374,50 @@
 
                 // 🌋 火山引擎分支处理
                 if (selectedModel.includes('doubao-seedance')) {
+                    if (!prompt || prompt.trim() === '') throw new Error("火山引擎规定：必须填写提示词文字！");
+
                     endpoint = '/api/volcengine/create';
                     let doubaoContent = [{ type: "text", text: prompt }];
                     
                     if (processedImages.length > 0) {
                         processedImages.forEach(url => {
                             let imgObj = { type: "image_url", image_url: { url: url } };
-                            // Seedance 2.0 必须带上 role 声明
                             if (selectedModel.includes('2-0')) imgObj.role = "reference_image";
                             doubaoContent.push(imgObj);
                         });
                     }
 
-             // 🚨 修正时长限制：支持官方的 4~15 秒自由生成
+                    // 🚨 防护 2：自动规避火山引擎的“参数洁癖”
                     let safeDuration = parseInt(duration);
-                    if (safeDuration < 4) safeDuration = 4;
-                    if (safeDuration > 15) safeDuration = 15;
+                    let safeRatio = globalRat;
+                    
+                    if (safeRatio === '21:9') safeRatio = '16:9'; // Seedance 不支持宽幅 21:9
+
+                    if (selectedModel.includes('2-0')) {
+                        // Seedance 2.0 官方支持 4～15秒 自由生成
+                        if (safeDuration < 4) safeDuration = 4;
+                        if (safeDuration > 15) safeDuration = 15;
+                    } else {
+                        // Seedance 1.5 必须锁定 5 或 10
+                        if (safeDuration < 8) safeDuration = 5;
+                        else safeDuration = 10;
+                    }
 
                     reqBody = { 
                         model: selectedModel, 
                         content: doubaoContent,
-                        ratio: globalRat,
+                        ratio: safeRatio,
                         duration: safeDuration 
                     };
                     
                     if (selectedModel.includes('2-0')) {
-                        reqBody.generate_audio = true; // 2.0 开启原生音效
+                        reqBody.generate_audio = true; // 开启原生音频
                         reqBody.watermark = false;
                     }
                 } else if (selectedModel === 'happyhorse-1.0-r2v' && processedImages.length > 0) {
                     reqBody.input.media = processedImages.map(url => ({ type: "reference_image", url: url }));
                 }
 
-                // 为了防止跨域及保证支付链路，必须调用本地 server.js
                 const baseURL = typeof API_BASE !== 'undefined' ? API_BASE : 'https://proxy-server-web.onrender.com';
                 const userToken = localStorage.getItem('userToken');
                 
@@ -404,20 +427,19 @@
                     body: JSON.stringify(reqBody)
                 });
                 
-                // 🌟 增强错误捕获：直接打印 400 背后的真实原因
                 const data = await res.json();
                 if (!res.ok) {
-                    throw new Error(data.error?.message || data.message || `API 拒绝请求 (HTTP ${res.status})`);
+                    throw new Error(data.error?.message || data.message || `火山接口拒收: HTTP ${res.status}`);
                 }
 
                 const taskId = (data.output && data.output.task_id) ? data.output.task_id : (data.task_id || data.id);
                 if(!taskId) throw new Error("API未返回任务ID");
                 
-                await pollVideoTask(taskId, uiId, rowId, duration, selectedModel);
+                await pollVideoTask(taskId, uiId, rowId, safeDuration || duration, selectedModel);
                 
             } catch (e) {
                 log(`❌ 镜头 ${rowId} 失败: ${e.message}`);
-                document.getElementById(uiId).innerHTML = `<div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px; text-align:center;"><span style="color:#f53f3f; font-size:11px; font-weight:bold;">❌ 失败</span><span style="font-size:9px; color:#888; margin-top:5px; word-break:break-all;">${e.message}</span><button onclick="this.parentElement.parentElement.remove()" style="margin-top:8px; font-size:10px; padding:2px 6px;">清除</button></div>`;
+                document.getElementById(uiId).innerHTML = `<div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px; text-align:center;"><span style="color:#f53f3f; font-size:11px; font-weight:bold;">❌ 失败</span><span style="font-size:9px; color:#888; margin-top:5px; word-break:break-all;">${e.message}</span><button onclick="this.parentElement.parentElement.remove()" style="margin-top:8px; font-size:10px; padding:2px 6px; cursor:pointer;">清除</button></div>`;
             }
         }
 
