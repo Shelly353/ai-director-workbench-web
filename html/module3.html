@@ -151,7 +151,7 @@
     </div>
     <div class="console-wrapper" id="consoleWrapper">
         <div class="console-header" onclick="toggleConsole()">
-            <span>📝 终端运行日志</span>
+            <span>📝 终端运行日志 (排查400报错专用)</span>
             <span id="consoleToggleIcon">▲ 点击展开</span>
         </div>
         <div class="console-content" id="logConsole"></div>
@@ -171,7 +171,6 @@
         const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // 统一收银台弹出
         window.showRechargeModal = function() {
             const targetUrl = 'recharge.html';
             const width = 450; const height = 650;
@@ -239,7 +238,6 @@
         function toggleConsole() { const wrapper = document.getElementById('consoleWrapper'); wrapper.classList.toggle('open'); document.getElementById('consoleToggleIcon').innerText = wrapper.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开'; }
         function log(msg) { const consoleEl = document.getElementById('logConsole'); if (consoleEl) { const time = new Date().toLocaleTimeString(); consoleEl.innerText += `[${time}] ${msg}\n`; consoleEl.scrollTop = consoleEl.scrollHeight; } }
 
-        // 🌟 选项卡折叠控制
         function toggleDetails(rowId, forceCollapse = null) {
             const el = document.getElementById(`details_${rowId}`);
             const icon = document.getElementById(`toggle_icon_${rowId}`);
@@ -311,7 +309,6 @@
             await updatePromptText(rowId);
             const row = storyboardData.find(x => x.id == rowId);
             if (!row) return;
-            // 🌟 触发生成瞬间：自动折叠
             toggleDetails(rowId, true);
             executeVideoTask({ rowId: row.id, prompt: row.text, duration: row.duration || 5, images: row.images || [] });
         }
@@ -320,7 +317,6 @@
             videoQueue = [];
             for (let row of storyboardData) {
                 await updatePromptText(row.id);
-                // 🌟 触发批量生成瞬间：全部自动折叠
                 toggleDetails(row.id, true); 
                 videoQueue.push({ rowId: row.id, prompt: row.text, duration: row.duration || 5, images: row.images });
             }
@@ -337,7 +333,7 @@
             }
         }
 
-        // 🌟 核心引擎：包含时长限制解除 + 原生音频控制 + 多图支持
+        // 🌟 终极护盾版执行引擎
         async function executeVideoTask(task) {
             const { rowId, prompt, duration, images } = task;
             const vGrid = document.getElementById(`vrow_videos_${rowId}`);
@@ -346,7 +342,6 @@
             const globalRes = document.getElementById('g_resolution').value || "720P";
             
             if (!(await checkAndDeductCredits('gen_video', selectedModel))) return;
-            
             logProduction(`分镜 ${rowId} 视频`, "视频", "AI生成", 5, selectedModel);
 
             const uiId = 'vbox_' + Date.now();
@@ -363,28 +358,30 @@
                 let endpoint = '/api/dashscope/create';
                 let reqBody = { model: selectedModel, input: { prompt: prompt }, parameters: { ratio: globalRat, duration: parseInt(duration), resolution: globalRes } };
 
-                // 🌋 火山引擎分支
+                // 🌋 火山引擎防 400 终极分流
                 if (selectedModel.includes('doubao-seedance')) {
-                    if (!prompt || prompt.trim() === '') throw new Error("火山引擎规定：必须填写提示词文字！");
+                    if (!prompt || prompt.trim() === '') throw new Error("火山引擎规定：必须填写提示词文字，不能仅靠图片！");
 
                     endpoint = '/api/volcengine/create';
                     let doubaoContent = [{ type: "text", text: prompt }];
                     
                     if (processedImages.length > 0) {
                         processedImages.forEach(url => {
-                            let imgObj = { type: "image_url", image_url: { url: url } };
-                            if (selectedModel.includes('2-0')) imgObj.role = "reference_image";
-                            doubaoContent.push(imgObj);
+                            // Seedance 要求所有图片强制加上 role 属性，否则可能 400
+                            doubaoContent.push({ 
+                                type: "image_url", 
+                                image_url: { url: url },
+                                role: "reference_image" 
+                            });
                         });
                     }
 
-                    // 🚨 修正：Seedance 1.5 和 2.0 官方目前均支持 4~15 秒自由生成
                     let safeDuration = parseInt(duration);
                     if (safeDuration < 4) safeDuration = 4;
                     if (safeDuration > 15) safeDuration = 15;
 
                     let safeRatio = globalRat;
-                    if (safeRatio === '21:9') safeRatio = '16:9'; // 自动修正不支持的比例
+                    if (safeRatio === '21:9') safeRatio = '16:9'; 
 
                     reqBody = { 
                         model: selectedModel, 
@@ -397,11 +394,14 @@
                         reqBody.generate_audio = true; 
                         reqBody.watermark = false;
                     }
+                    
+                    // 🌟 给终端打印提交的数据，一旦报 400 立刻就能查出哪里不对
+                    log(`[Debug] 镜 ${rowId} 提交给火山的参数: ${JSON.stringify(reqBody)}`);
                 } else if (selectedModel === 'happyhorse-1.0-r2v' && processedImages.length > 0) {
                     reqBody.input.media = processedImages.map(url => ({ type: "reference_image", url: url }));
                 }
 
-                const baseURL = 'https://proxy-server-web.onrender.com';
+                const baseURL = typeof API_BASE !== 'undefined' ? API_BASE : 'https://proxy-server-web.onrender.com';
                 const userToken = localStorage.getItem('userToken');
                 const res = await fetch(baseURL + endpoint, {
                     method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
@@ -409,12 +409,14 @@
                 });
                 
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error?.message || data.message || `API 拒绝 (HTTP ${res.status})`);
+                if (!res.ok) {
+                    throw new Error(data.error?.message || data.message || `API 拒绝 (HTTP ${res.status})`);
+                }
 
                 const taskId = (data.output && data.output.task_id) ? data.output.task_id : (data.task_id || data.id);
                 if(!taskId) throw new Error("API未返回任务ID");
                 
-                await pollVideoTask(taskId, uiId, rowId, safeDuration || duration, selectedModel);
+                await pollVideoTask(taskId, uiId, rowId, reqBody.duration || duration, selectedModel);
                 
             } catch (e) {
                 log(`❌ 镜头 ${rowId} 失败: ${e.message}`);
@@ -427,7 +429,7 @@
                 videoTimers[taskId] = setInterval(async () => {
                     try {
                         const pollUrl = selectedModel.includes('doubao-seedance') ? `/api/volcengine/poll/${taskId}` : `/api/dashscope/poll/${taskId}`;
-                        const baseURL = 'https://proxy-server-web.onrender.com';
+                        const baseURL = typeof API_BASE !== 'undefined' ? API_BASE : 'https://proxy-server-web.onrender.com';
                         const res = await fetch(baseURL + pollUrl, { headers: { 'Authorization': `Bearer ${localStorage.getItem('userToken')}` } });
                         const data = await res.json();
 
@@ -448,7 +450,10 @@
                             document.getElementById(uiId).innerHTML = `<video src="${url}#t=0.001" loop muted></video><div class="status-badge">✅ ${duration}s</div><div class="play-icon">▶</div><div style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:10;" onclick="openVideoModal('${uiId}', '${url}', '${rowId}')"></div>`;
                             resolve();
                         } else if (upperStatus === 'FAILED') { throw new Error(data.error?.message || data.output?.message || "云端渲染失败"); }
-                    } catch (e) { clearInterval(videoTimers[taskId]); resolve(); }
+                    } catch (e) { 
+                        if(e.message) log(`❌ 轮询异常: ${e.message}`);
+                        clearInterval(videoTimers[taskId]); resolve(); 
+                    }
                 }, 5000);
             });
         }
