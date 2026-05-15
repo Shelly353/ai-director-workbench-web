@@ -87,7 +87,7 @@
             </div>
         </div>
         <div class="user-panel">
-<span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
+            <span class="credit-badge" id="headerCredit" style="cursor:pointer;" onclick="showRechargeModal()">💎 积分: ...</span>
             <a class="logout-btn" onclick="logout()">退出</a>
         </div>
     </div>
@@ -95,9 +95,10 @@
     <div class="config-bar">
         <label>🎬 模型:</label>
         <select id="videoModelSelect">
-            <option value="happyhorse-1.0-r2v">Happy Horse (多参)</option>
-            <option value="wan2.7-r2v">Wan2.7 （多参）</option>
-            <option value="doubao-seedance-1-5-pro-251215">dseedance 1.5 pro</option>
+            <option value="happyhorse-1.0-r2v">Happy Horse (支持图1/图2控制)</option>
+            <option value="doubao-seedance-2-0-260128">Seedance 2.0 (原生音效/多图参考)</option>
+            <option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</option>
+            <option value="wan2.7-r2v">Wan 2.7 (强力动态)</option>
         </select>
 
         <label>📐 比例:</label>
@@ -126,17 +127,14 @@
 
     <div class="main-container">
         <div style="display:flex; justify-content:space-between; margin-bottom:20px; align-items:center;">
-            <h3 style="margin:0; font-size:20px;">视频任务队列 <span style="font-size:13px; color:var(--gray); font-weight:normal; margin-left:10px;">(生成后以小窗排列，点击查看大图与保存)</span></h3>
+            <h3 style="margin:0; font-size:20px;">视频任务队列</h3>
             <div id="queueStatus" style="color:var(--primary); font-weight:bold; font-size: 14px; background:#e8f3ff; padding:6px 12px; border-radius:6px;">队列空闲</div>
         </div>
         <div id="videoTasksList"></div>
     </div>
 
     <div id="hoverPreview"><img id="hoverImg" src=""></div>
-    <div id="mentionMenu">
-        <div style="font-size:11px; color:#888; margin-bottom:5px;">选择要引用的镜内参考图：</div>
-        <div id="mentionMenuGrid"></div>
-    </div>
+    <div id="mentionMenu"><div id="mentionMenuGrid"></div></div>
     <div id="imageGenModalBg" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:5000; justify-content:center; align-items:center;">
         <div style="background:#fff; width:95%; max-width:1200px; height:90vh; border-radius:12px; position:relative; overflow:hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
             <div style="position:absolute; top:15px; right:20px; z-index:10; cursor:pointer; font-size:24px; color:#86909c;" onclick="closeImageGenModal()">×</div>
@@ -159,7 +157,7 @@
         <div class="console-content" id="logConsole"></div>
     </div>
 
-    <script src="../js/app.js?v=2.0"></script>
+    <script src="../js/app.js?v=9999"></script>
     <script>
         let storyboardData = [];
         let globalRatio = "16:9";
@@ -173,32 +171,13 @@
         const SUPABASE_ANON_KEY = 'sb_publishable_A0rzUGADUPuhTod5eU1D1g_8E-d86BQ';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-
-// 统一打开全新的独立收银台页面
-window.showRechargeModal = function() {
-    // 自动判定当前路径级别，确保能正确找到 html/recharge.html
-    const path = window.location.pathname;
-    let targetUrl = 'html/recharge.html';
-    if (path.includes('/html/')) {
-        targetUrl = 'recharge.html';
-    }
-    
-    // 弹出一个居中、大小固定的独立收银台窗口
-    const width = 450;
-    const height = 650;
-    const left = (window.screen.width / 2) - (width / 2);
-    const top = (window.screen.height / 2) - (height / 2);
-    
-    window.open(targetUrl, 'AI充值收银台', `width=${width},height=${height},top=${top},left=${left},toolbar=no,menubar=no,scrollbars=no,resizable=no`);
-};
-
         async function fetchCredits() {
             const userId = localStorage.getItem('userId');
             if (!userId) return;
             try {
                 const { data } = await supabaseClient.from('profiles').select('credits').eq('user_id', userId).single();
                 if (data) {
-                    document.getElementById('headerCredit').innerText = `💎 ${data.credits}`;
+                    document.getElementById('headerCredit').innerText = `💎 积分: ${data.credits}`;
                     localStorage.setItem('userCredits', data.credits);
                 }
             } catch (e) { console.error("获取积分失败:", e); }
@@ -210,14 +189,13 @@ window.showRechargeModal = function() {
                 action_key: actionKey, 
                 is_gemini: isGemini 
             });
-
             if (error) { alert(`❌ 操作失败：${error.message}`); return false; }
             document.getElementById('headerCredit').innerText = `💎 积分: ${newCredits}`;
             localStorage.setItem('userCredits', newCredits);
             return true;
         }
 
-        // 🌟 物料追踪埋点引擎 (由于这个页面有自带的 supabaseClient)
+        // 🌟 核心：物料追踪埋点
         async function logProduction(assetName, mediaType, sourceType, cost, modelName) {
             try {
                 let pid = 'unknown_project';
@@ -225,18 +203,11 @@ window.showRechargeModal = function() {
                     const ctx = await DB.get('active_context');
                     if (ctx && ctx.projectId) pid = ctx.projectId;
                 } catch(err) {}
-
                 const { data: { user } } = await supabaseClient.auth.getUser();
                 if (!user) return;
-                
                 await supabaseClient.from('asset_production_logs').insert([{
-                    project_id: pid,
-                    user_email: user.email,
-                    asset_name: assetName,
-                    media_type: mediaType,
-                    source_type: sourceType,
-                    credits_spent: Number(cost) || 0,
-                    model_name: modelName || 'N/A'
+                    project_id: pid, user_email: user.email, asset_name: assetName,
+                    media_type: mediaType, source_type: sourceType, credits_spent: Number(cost) || 0, model_name: modelName || 'N/A'
                 }]);
             } catch(e) { console.warn("追踪日志记录失败", e); }
         }
@@ -252,55 +223,18 @@ window.showRechargeModal = function() {
         window.onload = async () => {
             const userId = localStorage.getItem('userId');
             if (!userId) { window.location.replace('index.html'); return; }
-
             await fetchCredits();
             storyboardData = await DB.get('storyboardData') || [];
             globalRatio = await DB.get('globalRatio') || "16:9";
-            
             const ratioEl = document.getElementById('g_ratio');
             if (ratioEl) ratioEl.value = globalRatio;
-
-            if (storyboardData.length === 0) {
-                log("未检测到分镜数据，请返回第二步确认！");
-            } else {
-                log("✅ 成功加载高清无损资产，准备视频生成。");
-                renderVideoTasksUI();
-            }
+            if (storyboardData.length > 0) renderVideoTasksUI();
         };
 
-        function toggleConsole() {
-            const wrapper = document.getElementById('consoleWrapper');
-            wrapper.classList.toggle('open');
-            document.getElementById('consoleToggleIcon').innerText = wrapper.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开';
-        }
+        function toggleConsole() { const wrapper = document.getElementById('consoleWrapper'); wrapper.classList.toggle('open'); document.getElementById('consoleToggleIcon').innerText = wrapper.classList.contains('open') ? '▼ 点击折叠' : '▲ 点击展开'; }
+        function log(msg) { const consoleEl = document.getElementById('logConsole'); if (consoleEl) { const time = new Date().toLocaleTimeString(); consoleEl.innerText += `[${time}] ${msg}\n`; consoleEl.scrollTop = consoleEl.scrollHeight; } }
 
-        function log(msg) {
-            const consoleEl = document.getElementById('logConsole');
-            if (consoleEl) {
-                const time = new Date().toLocaleTimeString();
-                consoleEl.innerText += `[${time}] ${msg}\n`;
-                consoleEl.scrollTop = consoleEl.scrollHeight;
-            }
-        }
-
-        function toggleDetails(rowId, forceCollapse = null) {
-            const el = document.getElementById(`details_${rowId}`);
-            const icon = document.getElementById(`toggle_icon_${rowId}`);
-            if (!el) return;
-            const shouldHide = forceCollapse !== null ? forceCollapse : (el.style.display !== 'none');
-            el.style.display = shouldHide ? 'none' : 'block';
-            icon.innerText = shouldHide ? '▶' : '▼';
-        }
-
-        async function updateVideoDuration(rowId, val) {
-            const row = storyboardData.find(x => x.id == rowId);
-            if (row) {
-                row.duration = parseInt(val);
-                await DB.set('storyboardData', storyboardData);
-                log(`已将镜头 ${rowId} 的预设时长修改为 ${val}秒`);
-            }
-        }
-
+        async function updateVideoDuration(rowId, val) { const row = storyboardData.find(x => x.id == rowId); if (row) { row.duration = parseInt(val); await DB.set('storyboardData', storyboardData); } }
         async function updatePromptText(rowId) {
             const row = storyboardData.find(x => x.id == rowId);
             const richEl = document.getElementById(`prompt_${rowId}`);
@@ -325,174 +259,42 @@ window.showRechargeModal = function() {
             const listDiv = document.getElementById('videoTasksList');
             listDiv.innerHTML = storyboardData.map(row => {
                 const dur = row.duration || 5; 
-                let imagesHtml = '<span style="font-size:13px; color:#c9cdd4;">无参图，纯文字生成</span>';
+                let imagesHtml = '<span style="font-size:13px; color:#c9cdd4;">无参考图</span>';
                 if (row.images && row.images.length > 0) {
                     imagesHtml = row.images.map(b64 => `<img src="${b64}" style="width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid #e5e6eb; box-shadow:0 2px 4px rgba(0,0,0,0.05);">`).join('');
                 }
-
                 return `
                 <div class="storyboard-row">
                     <div style="background:#f8f9fa; padding:20px; border-radius:8px; border-left:4px solid var(--primary);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <b style="font-size:16px; color:#1d2129; cursor:pointer; user-select:none;" onclick="toggleDetails('${row.id}')">
+                            <b style="font-size:16px; color:#1d2129; cursor:pointer;" onclick="toggleDetails('${row.id}')">
                                 <span id="toggle_icon_${row.id}">▼</span> 分镜 ${row.id}
                             </b>
                             <div style="display:flex; gap:12px; align-items:center;">
                                 <span style="font-size:13px; color:var(--gray);">时长:</span>
-                                <select class="dur-select" style="height:32px; border-radius:6px;" onchange="updateVideoDuration('${row.id}', this.value)">
+                                <select class="dur-select" onchange="updateVideoDuration('${row.id}', this.value)">
                                     ${[4,5,6,7,8,9,10,11,12,13,14,15].map(v => `<option value="${v}" ${dur==v?'selected':''}>${v}s</option>`).join('')}
                                 </select>
-                                <button class="btn btn-primary" style="height:32px; padding:0 15px; font-size:13px;" onclick="generateSingleVideo('${row.id}')">▶ 生成此镜</button>
-                                <button class="btn btn-outline" style="height:32px; padding:0 15px; font-size:13px; color:#f53f3f;" onclick="generateSingleVideo('${row.id}', true)">🔄 重做</button>
+                                <button class="btn btn-primary" onclick="generateSingleVideo('${row.id}')">▶ 生成此镜</button>
+                                <button class="btn btn-outline" style="color:#f53f3f;" onclick="generateSingleVideo('${row.id}', true)">🔄 重做</button>
                             </div>
                         </div>
                         <div id="details_${row.id}" style="margin-top:15px; display:block; border-top:1px dashed #e5e6eb; padding-top:15px;">
-                            <div style="margin-bottom:15px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                                    <div style="font-size:13px; color:var(--gray); font-weight:bold;">📝 视频生成提示词 (@引用镜内资产，输入"图1"、"图2"配合 HappyHorse 效果更佳):</div>
-                                    <span style="cursor:pointer; color:#722ed1; font-weight:bold; font-size:13px;" onclick="openImageGenModal('${row.id}')">🎨 AI 独立生图</span>
-                                </div>
-                                <div id="prompt_${row.id}" class="rich-input" contenteditable="true" data-placeholder="输入提示词细节... @引用镜内资产" onblur="updatePromptText('${row.id}')">${row.htmlText || row.text}</div>
-                            </div>
-                            <div>
-                                <div style="font-size:13px; color:var(--gray); margin-bottom:8px; font-weight:bold;">🖼️ 镜内可选参考图 (已按顺序编号，支持联动):</div>
-                                <div style="display:flex; flex-wrap:wrap; gap:10px;">${imagesHtml}</div>
-                            </div>
+                            <div id="prompt_${row.id}" class="rich-input" contenteditable="true" onblur="updatePromptText('${row.id}')">${row.htmlText || row.text}</div>
+                            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;">${imagesHtml}</div>
                         </div>
                     </div>
-                    
                     <div id="vrow_videos_${row.id}" style="display:flex; flex-wrap:wrap; gap:15px; margin-top: 20px;">
-                        ${(row.videos && row.videos.length > 0) ? 
-                            row.videos.map((v, idx) => {
-                                const vId = `vbox_saved_${row.id}_${idx}`;
-                                return `
-                                <div class="video-thumb" id="${vId}">
-                                    <video src="${v.url}#t=0.001" preload="metadata" loop muted></video>
-                                    <div class="status-badge">✅ ${v.duration}s</div>
-                                    <div class="play-icon">▶</div>
-                                    <div style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:10;" onclick="openVideoModal('${vId}', '${v.url}', '${row.id}')"></div>
-                                </div>`;
-                            }).join('') 
-                            : `<div class="placeholder-text">等待点击 [生成此镜] 按钮...</div>`
-                        }
+                        ${(row.videos && row.videos.length > 0) ? row.videos.map((v, idx) => `<div class="video-thumb"><video src="${v.url}#t=0.001" loop muted></video><div class="status-badge">✅ ${v.duration}s</div><div class="play-icon">▶</div><div style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:10;" onclick="openVideoModal('saved_${row.id}_${idx}', '${v.url}', '${row.id}')"></div></div>`).join('') : `<div class="placeholder-text">等待点击 [生成此镜]</div>`}
                     </div>
                 </div>`
             }).join('');
-
-            document.querySelectorAll('.rich-input').forEach(el => el.addEventListener('input', handleRichInput));
-            document.querySelectorAll('.inline-pill').forEach(pill => {
-                pill.onmouseenter = (e) => {
-                    const hp = document.getElementById('hoverPreview');
-                    const b64 = pill.getAttribute('data-b64');
-                    if (b64) { document.getElementById('hoverImg').src = b64; hp.style.display = 'block'; hp.style.left = (e.clientX + 15) + 'px'; hp.style.top = (e.clientY + 15) + 'px'; }
-                };
-                pill.onmouseleave = () => document.getElementById('hoverPreview').style.display = 'none';
-            });
         }
 
-        function checkEmptyGrid(rowId) {
-            const vGrid = document.getElementById(`vrow_videos_${rowId}`);
-            if(vGrid && vGrid.children.length === 0) vGrid.innerHTML = `<div class="placeholder-text">等待点击 [生成此镜] 按钮...</div>`;
-        }
-
-        function handleRichInput(e) {
-            const sel = window.getSelection();
-            if(sel.rangeCount === 0) return;
-            const range = sel.getRangeAt(0);
-            const text = range.startContainer.textContent.substring(0, range.startOffset);
-            if (text.endsWith('@')) {
-                const rowId = e.target.id.replace('prompt_', '');
-                const row = storyboardData.find(x => x.id == rowId);
-                if (!row || !row.images || row.images.length === 0) return;
-                savedRange = range.cloneRange();
-                const rect = range.getBoundingClientRect();
-                const menu = document.getElementById('mentionMenu');
-                menu.style.display = 'block'; menu.style.left = rect.left + 'px'; menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
-                document.getElementById('mentionMenuGrid').innerHTML = row.images.map((b64, index) => `
-                    <div style="aspect-ratio:1; border-radius:4px; overflow:hidden; cursor:pointer; border:1px solid #f2f3f5;" onmousedown="event.preventDefault();insertMentionPill('${b64}', '图${index+1}')">
-                        <img src="${b64}" style="width:100%;height:100%;object-fit:cover;">
-                    </div>
-                `).join('');
-            } else document.getElementById('mentionMenu').style.display = 'none';
-        }
-
-        function insertMentionPill(b64, name) {
-            document.getElementById('mentionMenu').style.display = 'none';
-            const sel = window.getSelection();
-            sel.removeAllRanges(); sel.addRange(savedRange);
-            savedRange.setStart(savedRange.startContainer, savedRange.startOffset - 1);
-            savedRange.deleteContents();
-            const span = document.createElement('span');
-            span.className = 'inline-pill'; span.contentEditable = 'false'; span.setAttribute('data-b64', b64);
-            span.innerHTML = `<img src="${b64}"><span>${name}</span>`;
-            savedRange.insertNode(span);
-            savedRange.setStartAfter(span); savedRange.insertNode(document.createTextNode('\u00A0'));
-            savedRange.collapse(false); sel.removeAllRanges(); sel.addRange(savedRange);
-            updatePromptText(span.closest('.rich-input').id.replace('prompt_', ''));
-        }
-
-        async function openImageGenModal(rowId) {
-            await updatePromptText(rowId);
-            document.getElementById('imageGenFrame').src = `image_gen_window.html?rowId=${rowId}`;
-            document.getElementById('imageGenModalBg').style.display = 'flex';
-        }
-
-        window.closeImageGenModal = function() {
-            document.getElementById('imageGenModalBg').style.display = 'none';
-            document.getElementById('imageGenFrame').src = ''; 
-        }
-
-        window.addGeneratedImageToRow = async function(rowId, b64) {
-            const row = storyboardData.find(x => x.id == rowId);
-            if (row && !row.images.includes(b64)) {
-                row.images.push(b64); await DB.set('storyboardData', storyboardData);
-                renderVideoTasksUI(); log(`✅ 独立生图成功，已加入分镜 ${rowId}！`);
-            }
-            closeImageGenModal();
-        };
-
-        function openVideoModal(uiId, url, rowId) {
-            currentVideoTarget = { uiId, url, rowId };
-            document.getElementById('modalVideoPlayer').src = url;
-            document.getElementById('videoModal').style.display = 'flex';
-        }
-        
-        function closeVideoModal() {
-            document.getElementById('videoModal').style.display = 'none';
-            document.getElementById('modalVideoPlayer').src = '';
-        }
-        
-        function downloadModalVideo() {
-            const a = document.createElement('a'); a.href = currentVideoTarget.url; a.download = `Scene_${currentVideoTarget.rowId}.mp4`; a.click();
-        }
-        
-        async function deleteModalVideo() {
-            if(confirm("确定删除此版本？")) {
-                const { uiId, url, rowId } = currentVideoTarget;
-                const el = document.getElementById(uiId); if(el) el.remove();
-                const row = storyboardData.find(x => x.id == rowId);
-                if (row && row.videos) {
-                    row.videos = row.videos.filter(v => v.url !== url);
-                    await DB.set('storyboardData', storyboardData);
-                }
-                checkEmptyGrid(rowId); closeVideoModal();
-            }
-        }
-
-        async function convertBase64ToUrl(b64) {
-            log(`☁️ 正在上传视频参考图至云端...`);
-            return await window.uploadMediaToCloud(b64, 'png');
-        }
-
-        async function generateSingleVideo(rowId, isRedo = false) {
+        async function generateSingleVideo(rowId) {
             await updatePromptText(rowId);
             const row = storyboardData.find(x => x.id == rowId);
             if (!row) return;
-
-            toggleDetails(rowId, true);
-            const vGrid = document.getElementById(`vrow_videos_${rowId}`);
-            const placeholder = vGrid.querySelector('.placeholder-text'); if (placeholder) placeholder.remove();
-
             executeVideoTask({ rowId: row.id, prompt: row.text, duration: row.duration || 5, images: row.images || [] });
         }
 
@@ -500,21 +302,22 @@ window.showRechargeModal = function() {
             videoQueue = [];
             for (let row of storyboardData) {
                 await updatePromptText(row.id);
-                toggleDetails(row.id, true); 
+                videoQueue.push({ rowId: row.id, prompt: row.text, duration: row.duration || 5, images: row.images });
             }
-            storyboardData.forEach(row => videoQueue.push({ rowId: row.id, prompt: row.text, duration: row.duration || 5, images: row.images }));
             processQueue();
         }
 
         async function processQueue() {
             const maxCon = parseInt(document.getElementById('g_concurrency').value) || 2;
             if (videoQueue.length === 0 && runningTasks === 0) { document.getElementById('queueStatus').innerText = "队列空闲"; return; }
+            document.getElementById('queueStatus').innerText = `队列运行中 (${videoQueue.length} 待处理)`;
             while (runningTasks < maxCon && videoQueue.length > 0) {
                 const task = videoQueue.shift(); runningTasks++;
                 executeVideoTask(task).finally(() => { runningTasks--; processQueue(); });
             }
         }
 
+        // 🌟 核心：兼容 Seedance 1.5 和 2.0 的生产引擎
         async function executeVideoTask(task) {
             const { rowId, prompt, duration, images } = task;
             const vGrid = document.getElementById(`vrow_videos_${rowId}`);
@@ -522,66 +325,64 @@ window.showRechargeModal = function() {
             const globalRat = document.getElementById('g_ratio').value || "16:9";
             const globalRes = document.getElementById('g_resolution').value || "720P";
             
-            if (!(await checkAndDeductCredits('gen_video', selectedModel))) {
-                throw new Error("积分余额不足或扣费失败，终止渲染。");
-            }
+            if (!(await checkAndDeductCredits('gen_video', selectedModel))) return;
             
-            // 🌟 埋点：视频生成
-            const costEst = 5; 
-            logProduction(`分镜 ${rowId} 视频`, "视频", "AI生成", costEst, selectedModel);
+            // 埋点记录
+            logProduction(`分镜 ${rowId} 视频`, "视频", "AI生成", 5, selectedModel);
 
-            const uiId = 'vbox_' + Date.now() + Math.floor(Math.random()*1000);
-            vGrid.insertAdjacentHTML('beforeend', `<div class="video-thumb" id="${uiId}"><div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px; text-align:center;"><span style="color:var(--primary); font-size:12px; font-weight:bold;">🚀 启动预处理...</span></div></div>`);
+            const uiId = 'vbox_' + Date.now();
+            vGrid.insertAdjacentHTML('beforeend', `<div class="video-thumb" id="${uiId}"><div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px;"><span style="color:var(--primary); font-size:12px; font-weight:bold;">🚀 启动中...</span></div></div>`);
 
             try {
                 let processedImages = [];
                 if (images && images.length > 0) {
-                    document.getElementById(uiId).innerHTML = `<div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px; text-align:center;"><span style="color:#00b96b; font-size:12px; font-weight:bold;">⏳ 正在上传参考图...</span></div>`;
-                    for (let img of images) processedImages.push(await convertBase64ToUrl(img));
-                    document.getElementById(uiId).innerHTML = `<div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px; text-align:center;"><span style="color:var(--primary); font-size:12px; font-weight:bold;">🚀 [${selectedModel}] 提交中...</span></div>`;
+                    for (let img of images) processedImages.push(await window.uploadMediaToCloud(img, 'png'));
                 }
 
                 let endpoint = '/api/dashscope/create';
                 let reqBody = { model: selectedModel, input: { prompt: prompt }, parameters: { ratio: globalRat, duration: parseInt(duration), resolution: globalRes } };
 
-                if (selectedModel === 'happyhorse-1.0-r2v' && processedImages.length > 0) {
-                    reqBody.input.media = processedImages.map(url => ({ type: "reference_image", url: url }));
-                } else if (selectedModel === 'wan2.7-r2v' && processedImages.length > 0) {
-                    reqBody.input.media = [{ type: "reference_image", url: processedImages[0] }];
-                } else if (selectedModel === 'doubao-seedance-1-5-pro-251215') {
+                // 🌟 火山引擎 (Seedance 1.5/2.0) 特殊分支
+                if (selectedModel.includes('doubao-seedance')) {
                     endpoint = '/api/volcengine/create';
                     let doubaoContent = [{ type: "text", text: prompt }];
-                    if (processedImages.length > 0) doubaoContent.push({ type: "image_url", image_url: { url: processedImages[0] } });
+                    
+                    if (processedImages.length > 0) {
+                        processedImages.forEach(url => {
+                            let imgObj = { type: "image_url", image_url: { url: url } };
+                            // Seedance 2.0 要求显式声明 role
+                            if (selectedModel === 'doubao-seedance-2-0-260128') imgObj.role = "reference_image";
+                            doubaoContent.push(imgObj);
+                        });
+                    }
                     reqBody = { model: selectedModel, content: doubaoContent };
+                    
+                    // 🌟 Seedance 2.0 参数扁平化处理
+                    if (selectedModel === 'doubao-seedance-2-0-260128') {
+                        reqBody.ratio = globalRat;
+                        reqBody.duration = parseInt(duration);
+                        reqBody.generate_audio = true; // 开启原生音效
+                        reqBody.watermark = false;
+                    }
+                } else if (selectedModel === 'happyhorse-1.0-r2v' && processedImages.length > 0) {
+                    reqBody.input.media = processedImages.map(url => ({ type: "reference_image", url: url }));
                 }
 
-                const baseURL = typeof API_BASE !== 'undefined' ? API_BASE : 'https://proxy-server-web.onrender.com';
+                const baseURL = 'https://proxy-server-web.onrender.com';
                 const userToken = localStorage.getItem('userToken');
-                
                 const res = await fetch(baseURL + endpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${userToken}`
-                    },
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
                     body: JSON.stringify(reqBody)
                 });
                 
-                if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-
                 const data = await res.json();
-                if (data.error || data.code) throw new Error(data.error?.message || data.message || "请求被拒绝");
-                
                 const taskId = (data.output && data.output.task_id) ? data.output.task_id : (data.task_id || data.id);
-                if(!taskId) throw new Error("未返回任务ID");
-                
-                document.getElementById(uiId).innerHTML = `<div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; text-align:center;"><span style="color:#00b96b; font-size:12px; font-weight:bold;">🔄 渲染中</span><span style="font-size:10px; color:#888;">${taskId.substring(0,8)}</span></div>`;
+                if(!taskId) throw new Error(data.message || "未返回任务ID");
                 
                 await pollVideoTask(taskId, uiId, rowId, duration, selectedModel);
                 
             } catch (e) {
-                log(`镜头 ${rowId} 任务失败: ${e.message}`);
-                document.getElementById(uiId).innerHTML = `<div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; padding:10px; text-align:center;" onclick="this.parentElement.remove(); checkEmptyGrid('${rowId}');"><span style="color:#f53f3f; font-size:12px; font-weight:bold;">❌ 失败 (点击移除)</span><span style="font-size:9px; color:#888; margin-top:5px; word-break:break-all;">${e.message}</span></div>`;
+                document.getElementById(uiId).innerHTML = `<div style="text-align:center; color:red; font-size:10px;">失败: ${e.message}</div>`;
             }
         }
 
@@ -589,18 +390,9 @@ window.showRechargeModal = function() {
             return new Promise((resolve) => {
                 videoTimers[taskId] = setInterval(async () => {
                     try {
-                        const pollUrl = selectedModel === 'doubao-seedance-1-5-pro-251215' ? `/api/volcengine/poll/${taskId}` : `/api/dashscope/poll/${taskId}`;
-                        const baseURL = typeof API_BASE !== 'undefined' ? API_BASE : 'https://proxy-server-web.onrender.com';
-                        const userToken = localStorage.getItem('userToken');
-
-                        const res = await fetch(baseURL + pollUrl, {
-                            method: 'GET',
-                            headers: {
-                                'Authorization': `Bearer ${userToken}`
-                            }
-                        });
-                        
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        const pollUrl = selectedModel.includes('doubao-seedance') ? `/api/volcengine/poll/${taskId}` : `/api/dashscope/poll/${taskId}`;
+                        const baseURL = 'https://proxy-server-web.onrender.com';
+                        const res = await fetch(baseURL + pollUrl, { headers: { 'Authorization': `Bearer ${localStorage.getItem('userToken')}` } });
                         const data = await res.json();
 
                         const status = (data.output && data.output.task_status) ? data.output.task_status : data.status;
@@ -609,8 +401,6 @@ window.showRechargeModal = function() {
                         if (upperStatus === 'SUCCEEDED' || upperStatus === 'SUCCESS') {
                             clearInterval(videoTimers[taskId]);
                             let url = (data.output && data.output.video_url) ? data.output.video_url : (data.content?.video_url || data.video_url);
-                            
-                            document.getElementById(uiId).innerHTML = `<div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; background:#2d2d2d; flex-direction:column; text-align:center;"><span style="color:#00b96b; font-size:12px; font-weight:bold;">☁️ 正在保存至云端...</span></div>`;
                             url = await window.uploadMediaToCloud(url, 'mp4');
                             
                             const row = storyboardData.find(x => x.id == rowId);
@@ -619,16 +409,18 @@ window.showRechargeModal = function() {
                                 row.videos.push({ url: url, duration: duration, time: Date.now() });
                                 await DB.set('storyboardData', storyboardData); 
                             }
-                            
-                            document.getElementById(uiId).innerHTML = `<video src="${url}#t=0.001" preload="metadata" loop muted></video><div class="status-badge">✅ ${duration}s</div><div class="play-icon">▶</div><div style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:10;" onclick="openVideoModal('${uiId}', '${url}', '${rowId}')"></div>`;
+                            document.getElementById(uiId).innerHTML = `<video src="${url}#t=0.001" loop muted></video><div class="status-badge">✅ ${duration}s</div><div class="play-icon">▶</div><div style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:10;" onclick="openVideoModal('${uiId}', '${url}', '${rowId}')"></div>`;
                             resolve();
-                        } else if (upperStatus === 'FAILED') {
-                            throw new Error(data.error?.message || data.output?.message || "模型生成失败");
-                        }
+                        } else if (upperStatus === 'FAILED') { throw new Error("生成失败"); }
                     } catch (e) { clearInterval(videoTimers[taskId]); resolve(); }
                 }, 5000);
             });
         }
+        
+        function openVideoModal(uiId, url, rowId) { currentVideoTarget = { uiId, url, rowId }; document.getElementById('modalVideoPlayer').src = url; document.getElementById('videoModal').style.display = 'flex'; }
+        function closeVideoModal() { document.getElementById('videoModal').style.display = 'none'; document.getElementById('modalVideoPlayer').src = ''; }
+        function logout() { localStorage.clear(); location.href = '../index.html'; }
+        function saveAndGoTo(url) { location.href = url; }
     </script>
 </body>
 </html>
